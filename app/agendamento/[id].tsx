@@ -1,5 +1,5 @@
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, TextInput, Switch,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, TextInput, Switch, Modal, Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -44,6 +44,10 @@ export default function AgendamentoDetalheScreen() {
   const [editData, setEditData] = useState<Partial<Agendamento>>({});
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const { enviar: enviarWhatsApp, loading: whatsappLoading } = useWhatsApp();
+
+  // Modal para valor recebido (Android não suporta Alert.prompt)
+  const [modalConcluidoVisible, setModalConcluidoVisible] = useState(false);
+  const [valorRecebidoInput, setValorRecebidoInput] = useState("");
 
   useEffect(() => {
     getAgendamentos().then((all) => {
@@ -117,51 +121,44 @@ export default function AgendamentoDetalheScreen() {
     }
   }
 
+  async function confirmarConclusao(valorText: string) {
+    const valorRecebido = parseFloat(valorText.replace(",", ".")) || item!.valor;
+    const dataConclusao = new Date().toISOString();
+    await updateAgendamento(item!.id, { status: "concluido", valorRecebido, dataConclusao });
+    setItem({ ...item!, status: "concluido", valorRecebido, dataConclusao });
+    setModalConcluidoVisible(false);
+    const diferenca = valorRecebido - item!.valor;
+    const mensagemDiferenca = diferenca > 0
+      ? `\n\n✅ Adicional recebido: +${formatMoney(diferenca)}`
+      : diferenca < 0
+      ? `\n\n⚠️ Diferença: ${formatMoney(diferenca)}`
+      : "";
+    Alert.alert(
+      "Sucesso",
+      `Agendamento concluído!\n\nValor orçado: ${formatMoney(item!.valor)}\nValor recebido: ${formatMoney(valorRecebido)}${mensagemDiferenca}`
+    );
+  }
+
   function marcarComoConcluido() {
     if (item!.status === "concluido") return;
 
-        Alert.prompt(
-      "Valor Recebido",
-      `Qual foi o valor realmente recebido?\n\nValor orçado: ${formatMoney(item!.valor)}`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Confirmar",
-          onPress: async (valorText?: string) => {
-            const valorRecebido = parseFloat(valorText || "") || item!.valor;
-            const dataConclusao = new Date().toISOString();
-            
-            await updateAgendamento(item!.id, {
-              status: "concluido",
-              valorRecebido,
-              dataConclusao,
-            });
-            
-            setItem({
-              ...item!,
-              status: "concluido",
-              valorRecebido,
-              dataConclusao,
-            });
-            
-            const diferenca = valorRecebido - item!.valor;
-            const mensagemDiferenca = diferenca > 0
-              ? `\n\n✅ Adicional recebido: +${formatMoney(diferenca)}`
-              : diferenca < 0
-              ? `\n\n⚠️ Diferença: ${formatMoney(diferenca)}`
-              : "";
-            
-            Alert.alert(
-              "Sucesso",
-              `Agendamento concluído!\n\nValor orçado: ${formatMoney(item!.valor)}\nValor recebido: ${formatMoney(valorRecebido)}${mensagemDiferenca}`
-            );
-          },
-        },
-      ],
-      "plain-text",
-      String(item!.valor),
-      "decimal-pad"
-    );
+    if (Platform.OS === "ios") {
+      Alert.prompt(
+        "Valor Recebido",
+        `Qual foi o valor realmente recebido?\n\nValor orçado: ${formatMoney(item!.valor)}`,
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Confirmar", onPress: async (valorText?: string) => confirmarConclusao(valorText ?? "") },
+        ],
+        "plain-text",
+        String(item!.valor),
+        "decimal-pad"
+      );
+    } else {
+      // Android: usar modal próprio
+      setValorRecebidoInput(String(item!.valor));
+      setModalConcluidoVisible(true);
+    }
   }
 
   if (isEditing) {
@@ -450,6 +447,46 @@ export default function AgendamentoDetalheScreen() {
           <Text style={[styles.deleteBtnText, { color: colors.error }]}>Excluir Agendamento</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Modal para valor recebido (Android) */}
+      <Modal
+        visible={modalConcluidoVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalConcluidoVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Valor Recebido</Text>
+            <Text style={[styles.modalSub, { color: colors.muted }]}>
+              Qual foi o valor realmente recebido?{"\n"}Valor orçado: {item ? formatMoney(item.valor) : ""}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { borderColor: colors.border, color: colors.foreground }]}
+              keyboardType="decimal-pad"
+              value={valorRecebidoInput}
+              onChangeText={setValorRecebidoInput}
+              placeholder="0,00"
+              placeholderTextColor={colors.muted}
+              autoFocus
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { borderColor: colors.border }]}
+                onPress={() => setModalConcluidoVisible(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.muted }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: colors.primary }]}
+                onPress={() => confirmarConclusao(valorRecebidoInput)}
+              >
+                <Text style={[styles.modalBtnText, { color: "#fff" }]}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -582,5 +619,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalBox: {
+    borderRadius: 12,
+    padding: 24,
+    width: "100%",
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  modalSub: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  modalBtns: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 4,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  modalBtnText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

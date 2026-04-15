@@ -299,7 +299,7 @@ export default function NovoAgendamentoScreen() {
         clienteTelefone: clienteSelecionado.telefone,
         data,
         hora,
-        tipoServico: servicoSelecionado?.nome || "",
+        tipoServico: servicoSelecionado?.nome || moveisParaSalvar[0]?.servicoNome || "Serviço",
         descricao,
         endereco,
         valor: valorAgendamento,

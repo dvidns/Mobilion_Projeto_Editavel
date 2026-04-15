@@ -70,7 +70,7 @@ export default function PainelScreen() {
     cancelados: agendamentos.filter((a) => a.status === "cancelado").length,
     totalValue: agendamentos
       .filter((a) => a.status !== "cancelado")
-      .reduce((sum, a) => sum + a.valor, 0),
+      .reduce((sum, a) => sum + (a.valorRecebido ?? a.valor), 0),
   };
 
   // Agrupar por dia

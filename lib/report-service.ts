@@ -65,7 +65,7 @@ export async function gerarRelatorioExcel(dataInicio: string, dataFim: string): 
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
   const filename = `relatorio_${dataInicio}_${dataFim}.xlsx`;
   
-  return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbout}`;
+  return wbout;
 }
 
 export async function gerarRelatorioPDF(dataInicio: string, dataFim: string): Promise<string> {
@@ -172,9 +172,7 @@ export async function gerarRelatorioPDF(dataInicio: string, dataFim: string): Pr
     </html>
   `;
 
-  // Converter para base64
-  const base64 = Buffer.from(html).toString('base64');
-  return `data:text/html;base64,${base64}`;
+  return html;
 }
 
 export async function gerarRelatorioAgendamentosPDF(dataInicio: string, dataFim: string): Promise<string> {
@@ -282,9 +280,7 @@ export async function gerarRelatorioAgendamentosPDF(dataInicio: string, dataFim:
     </html>
   `;
 
-  // Converter para base64
-  const base64 = Buffer.from(html).toString('base64');
-  return `data:text/html;base64,${base64}`;
+  return html;
 }
 
 export async function gerarRelatorioCSV(dataInicio: string, dataFim: string): Promise<string> {

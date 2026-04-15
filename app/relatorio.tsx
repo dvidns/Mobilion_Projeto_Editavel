@@ -137,9 +137,15 @@ export default function RelatorioScreen() {
 
       // Salvar arquivo
       const fileUri = (FileSystem.documentDirectory || "") + nomeArquivo;
-      await FileSystem.writeAsStringAsync(fileUri, conteudo, {
-        encoding: "utf8" as any,
-      });
+      if (formato === "excel") {
+        await FileSystem.writeAsStringAsync(fileUri, conteudo, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+      } else {
+        await FileSystem.writeAsStringAsync(fileUri, conteudo, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+      }
 
       // Compartilhar
       if (await Sharing.isAvailableAsync()) {

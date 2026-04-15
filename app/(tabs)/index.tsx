@@ -41,7 +41,7 @@ export default function HomeScreen() {
 
   const total = agendamentos
     .filter((a) => a.status !== "cancelado")
-    .reduce((sum, a) => sum + a.valor, 0);
+    .reduce((sum, a) => sum + (a.valorRecebido ?? a.valor), 0);
 
   const confirmados = agendamentos.filter((a) => a.status === "confirmado" || a.status === "concluido").length;
 

@@ -232,10 +232,23 @@ export async function getAgendamentos(): Promise<Agendamento[]> {
         ...a,
         moveis: [{
           id: uuid(),
-          nome: a.tipoServico || "Móvel",
-          descricao: a.descricao,
-          fotoUri: a.fotoUri,
+          servicoNome: a.tipoServico || "Serviço",
+          valor: a.valor ?? 0,
+          quantidade: 1,
         }],
+      };
+    }
+    // Verificar se os moveis estão no formato antigo (têm 'nome' em vez de 'servicoNome')
+    const primeiroMovel = a.moveis[0];
+    if (primeiroMovel && 'nome' in primeiroMovel && !('servicoNome' in primeiroMovel)) {
+      return {
+        ...a,
+        moveis: a.moveis.map((m: any) => ({
+          id: m.id || uuid(),
+          servicoNome: m.nome || a.tipoServico || "Serviço",
+          valor: m.valor ?? a.valor ?? 0,
+          quantidade: m.quantidade ?? 1,
+        })),
       };
     }
     return a;
