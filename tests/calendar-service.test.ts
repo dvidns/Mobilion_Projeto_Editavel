@@ -79,7 +79,7 @@ describe("calendar-service sync", () => {
       "@montafacil:calendar_event_ids",
       expect.stringContaining('"agendamento_a1":"event-1"')
     );
-    expect(setItem).toHaveBeenCalledWith(
+    expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
       "@montafacil:calendar_event_ids",
       expect.stringContaining('"retorno_a1":"event-2"')
     );
@@ -103,7 +103,7 @@ describe("calendar-service sync", () => {
       },
     ]);
     mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify({ agendamento_a2: "event-3" }));
-    mockedCalendar.updateEventAsync.mockResolvedValue(undefined);
+    mockedCalendar.updateEventAsync.mockResolvedValue("event-3" as never);
 
     const count = await syncAgendamentosToCalendar("calendar-456");
 

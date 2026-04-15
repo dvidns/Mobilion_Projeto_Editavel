@@ -126,6 +126,7 @@ export default function NovoAgendamentoScreen() {
   const [hora, setHora] = useState("08:00");
   const [endereco, setEndereco] = useState("");
   const [valor, setValor] = useState("");
+  const [quantidadeMovel, setQuantidadeMovel] = useState("1");
   const [descricao, setDescricao] = useState("");
 
   const [moveis, setMoveis] = useState<ItemMovel[]>([]);
@@ -161,6 +162,8 @@ export default function NovoAgendamentoScreen() {
 
   // Memoizar cores para evitar re-renders
   const colors = useColors();
+
+  const timePickerDisplay = Platform.OS === "android" ? "clock" : "spinner";
 
   // Memoizar contatos filtrados
   const contatosFiltrados = useMemo(() => {
@@ -258,12 +261,13 @@ export default function NovoAgendamentoScreen() {
     // Se não há móveis adicionados, mas há serviço selecionado, adicionar automaticamente
     let moveisParaSalvar = moveis;
     if (moveis.length === 0 && servicoSelecionado && valor) {
+      const quantidadeInicial = Math.max(1, parseInt(quantidadeMovel, 10) || 1);
       const novoMovel: ItemMovel = {
         id: Math.random().toString(36).slice(2),
         servicoId: servicoSelecionado.id,
         servicoNome: servicoSelecionado.nome,
         valor: valor,
-        quantidade: 1,
+        quantidade: quantidadeInicial,
       };
       moveisParaSalvar = [novoMovel];
     }
@@ -317,7 +321,7 @@ export default function NovoAgendamentoScreen() {
     } finally {
       setSaving(false);
     }
-  }, [clienteSelecionado, moveis, servicoSelecionado, valor, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, router]);
+  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, router]);
 
   // Callbacks para otimizar re-renders
   const handleUpdateQuantidade = useCallback((index: number, delta: number) => {
@@ -336,15 +340,17 @@ export default function NovoAgendamentoScreen() {
 
   const handleAddMovel = useCallback(() => {
     if (!servicoSelecionado || !valor) return;
+    const quantidade = Math.max(1, parseInt(quantidadeMovel, 10) || 1);
     const novoMovel: ItemMovel = {
       id: Math.random().toString(36).slice(2),
       servicoId: servicoSelecionado.id,
       servicoNome: servicoSelecionado.nome,
       valor,
-      quantidade: 1,
+      quantidade,
     };
     setMoveis(prev => [...prev, novoMovel]);
-  }, [servicoSelecionado, valor]);
+    setQuantidadeMovel("1");
+  }, [servicoSelecionado, valor, quantidadeMovel]);
 
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
@@ -429,27 +435,6 @@ export default function NovoAgendamentoScreen() {
         {/* ── SERVIÇO ─────────────────────────────────────────────────────── */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
           <Text style={[styles.label, { color: colors.muted }]}>Tipo de Serviço *</Text>
-          {servicoSelecionado && valor && (
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                if (servicoSelecionado && valor) {
-                  const novoMovel = {
-                    id: Math.random().toString(36).substr(2, 9),
-                    servicoId: servicoSelecionado.id,
-                    servicoNome: servicoSelecionado.nome,
-                    valor: valor,
-                    quantidade: 1,
-                  };
-                  setMoveis([...moveis, novoMovel]);
-                  setServicoSelecionado(null);
-                  setValor("");
-                }
-              }}
-            >
-              <MaterialIcons name="add" size={20} color="white" />
-            </TouchableOpacity>
-          )}
         </View>
         <TouchableOpacity
           style={[styles.picker, { borderColor: colors.border, backgroundColor: colors.surface }]}
@@ -502,6 +487,31 @@ export default function NovoAgendamentoScreen() {
           placeholder="0,00"
           keyboardType="decimal-pad"
         />
+
+        <View style={styles.movelConfigRow}>
+          <View style={styles.movelQtdBox}>
+            <Text style={[styles.label, { color: colors.muted }]}>Quantidade</Text>
+            <TextInput
+              value={quantidadeMovel}
+              onChangeText={(text) => setQuantidadeMovel(text.replace(/\D/g, ""))}
+              keyboardType="number-pad"
+              style={[styles.input, styles.movelQtdInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+              placeholder="1"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.addMovelActionBtn, { backgroundColor: colors.primary }]}
+            onPress={handleAddMovel}
+            activeOpacity={0.8}
+            disabled={!servicoSelecionado || !valor}
+          >
+            <MaterialIcons name="playlist-add" size={20} color="#fff" />
+            <Text style={styles.addMovelActionText}>Adicionar à lista</Text>
+          </TouchableOpacity>
+        </View>
+
         {servicoSelecionado && (
           <Text style={[styles.hint, { color: colors.muted }]}>
             Referência: R$ {servicoSelecionado.valorMin} – R$ {servicoSelecionado.valorMax}
@@ -748,6 +758,7 @@ export default function NovoAgendamentoScreen() {
                   style={[styles.modalItem, { borderBottomColor: colors.border }]}
                   onPress={() => {
                     setClienteSelecionado(item);
+                    setEndereco(item.endereco ?? "");
                     setModalCliente(false);
                   }}
                   activeOpacity={0.7}
@@ -875,7 +886,7 @@ export default function NovoAgendamentoScreen() {
         <DateTimePicker
           value={new Date(`2000-01-01T${timePickerMode === "hora" ? hora : horaRetorno}:00`)}
           mode="time"
-          display="spinner"
+          display={timePickerDisplay}
           onChange={(event, selectedDate) => {
             if (event.type === "dismissed") {
               setShowTimePicker(false);
@@ -1031,6 +1042,34 @@ const styles = StyleSheet.create({
   movelValor: {
     fontSize: 12,
     marginTop: 2,
+  },
+  movelConfigRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    marginBottom: 4,
+  },
+  movelQtdBox: {
+    flex: 1,
+  },
+  movelQtdInput: {
+    marginBottom: 0,
+  },
+  addMovelActionBtn: {
+    minWidth: 170,
+    height: 48,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  addMovelActionText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
   },
   addMovelBtn: {
     flexDirection: "row",

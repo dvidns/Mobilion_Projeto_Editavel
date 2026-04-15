@@ -216,11 +216,12 @@ export async function syncAgendamentosToCalendar(calendarId: string, userEmail?:
       const entries = buildSyncEntries(agendamento);
 
       if (agendamento.status === "cancelado") {
-        for (const entry of entries) {
-          const mappedEventId = eventMap[entry.key];
+        const cancelKeys = [`agendamento_${agendamento.id}`, `retorno_${agendamento.id}`];
+        for (const key of cancelKeys) {
+          const mappedEventId = eventMap[key];
           if (mappedEventId) {
             await deleteCalendarEvent(mappedEventId);
-            delete eventMap[entry.key];
+            delete eventMap[key];
           }
         }
         continue;

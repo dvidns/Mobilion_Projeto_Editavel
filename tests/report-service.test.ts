@@ -1,19 +1,43 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as XLSX from 'xlsx';
 import { gerarRelatorioExcel, gerarRelatorioPDF, gerarRelatorioCSV, gerarRelatorioAgendamentosPDF } from '../lib/report-service';
-import { getAgendamentos } from '../lib/store';
+import { getAgendamentos, type Agendamento } from '../lib/store';
 
-// Mock das dependências
-vi.mock('xlsx');
+const xlsxMocks = vi.hoisted(() => ({
+  mockJsonToSheet: vi.fn(),
+  mockAoaToSheet: vi.fn(),
+  mockBookNew: vi.fn(),
+  mockBookAppendSheet: vi.fn(),
+  mockWrite: vi.fn(),
+}));
+
+vi.mock('xlsx', () => ({
+  default: {
+    utils: {
+      json_to_sheet: xlsxMocks.mockJsonToSheet,
+      aoa_to_sheet: xlsxMocks.mockAoaToSheet,
+      book_new: xlsxMocks.mockBookNew,
+      book_append_sheet: xlsxMocks.mockBookAppendSheet,
+    },
+    write: xlsxMocks.mockWrite,
+  },
+  utils: {
+    json_to_sheet: xlsxMocks.mockJsonToSheet,
+    aoa_to_sheet: xlsxMocks.mockAoaToSheet,
+    book_new: xlsxMocks.mockBookNew,
+    book_append_sheet: xlsxMocks.mockBookAppendSheet,
+  },
+  write: xlsxMocks.mockWrite,
+}));
+
 vi.mock('../lib/store');
 
 const mockGetAgendamentos = vi.mocked(getAgendamentos);
-const mockXLSX = vi.mocked(XLSX);
 
 describe('Report Service', () => {
-  const mockAgendamentos = [
+  const mockAgendamentos: Agendamento[] = [
     {
       id: '1',
+      clienteId: 'c1',
       data: '2024-01-15',
       hora: '10:00',
       clienteNome: 'João Silva',
@@ -22,9 +46,11 @@ describe('Report Service', () => {
       valor: 150,
       valorRecebido: 150,
       status: 'concluido' as const,
+      criadoEm: '2024-01-10T10:00:00.000Z',
     },
     {
       id: '2',
+      clienteId: 'c2',
       data: '2024-01-16',
       hora: '14:00',
       clienteNome: 'Maria Santos',
@@ -33,9 +59,11 @@ describe('Report Service', () => {
       valor: 100,
       valorRecebido: 120,
       status: 'concluido' as const,
+      criadoEm: '2024-01-11T10:00:00.000Z',
     },
     {
       id: '3',
+      clienteId: 'c3',
       data: '2024-01-17',
       hora: '09:00',
       clienteNome: 'Pedro Oliveira',
@@ -43,6 +71,7 @@ describe('Report Service', () => {
       tipoServico: 'Montagem de mesa',
       valor: 80,
       status: 'pendente' as const,
+      criadoEm: '2024-01-12T10:00:00.000Z',
     },
   ];
 
@@ -56,16 +85,16 @@ describe('Report Service', () => {
       const dataInicio = '2024-01-01';
       const dataFim = '2024-01-31';
 
-      mockXLSX.utils.json_to_sheet.mockReturnValue({});
-      mockXLSX.utils.aoa_to_sheet.mockReturnValue({});
-      mockXLSX.utils.book_new.mockReturnValue({});
-      mockXLSX.utils.book_append_sheet.mockImplementation(() => {});
-      mockXLSX.write.mockReturnValue('mocked-base64-data');
+      xlsxMocks.mockJsonToSheet.mockReturnValue({});
+      xlsxMocks.mockAoaToSheet.mockReturnValue({});
+      xlsxMocks.mockBookNew.mockReturnValue({});
+      xlsxMocks.mockBookAppendSheet.mockImplementation(() => {});
+      xlsxMocks.mockWrite.mockReturnValue('mocked-base64-data');
 
       const result = await gerarRelatorioExcel(dataInicio, dataFim);
 
       expect(mockGetAgendamentos).toHaveBeenCalledTimes(1);
-      expect(mockXLSX.utils.json_to_sheet).toHaveBeenCalledWith([
+      expect(xlsxMocks.mockJsonToSheet).toHaveBeenCalledWith([
         {
           'Data': '15/01/2024',
           'Horário': '10:00',
@@ -88,23 +117,23 @@ describe('Report Service', () => {
         },
       ]);
 
-      expect(result).toContain('data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,mocked-base64-data');
+      expect(result).toBe('mocked-base64-data');
     });
 
     it('deve calcular totais corretamente', async () => {
       const dataInicio = '2024-01-01';
       const dataFim = '2024-01-31';
 
-      mockXLSX.utils.json_to_sheet.mockReturnValue({});
-      mockXLSX.utils.aoa_to_sheet.mockReturnValue({});
-      mockXLSX.utils.book_new.mockReturnValue({});
-      mockXLSX.utils.book_append_sheet.mockImplementation(() => {});
-      mockXLSX.write.mockReturnValue('mocked-base64-data');
+      xlsxMocks.mockJsonToSheet.mockReturnValue({});
+      xlsxMocks.mockAoaToSheet.mockReturnValue({});
+      xlsxMocks.mockBookNew.mockReturnValue({});
+      xlsxMocks.mockBookAppendSheet.mockImplementation(() => {});
+      xlsxMocks.mockWrite.mockReturnValue('mocked-base64-data');
 
       await gerarRelatorioExcel(dataInicio, dataFim);
 
       // Verifica se o resumo foi criado com os valores corretos
-      expect(mockXLSX.utils.aoa_to_sheet).toHaveBeenCalledWith([
+      expect(xlsxMocks.mockAoaToSheet).toHaveBeenCalledWith([
         ['RESUMO DO PERÍODO'],
         [''],
         ['Data Início', '2024-01-01'],
@@ -120,16 +149,28 @@ describe('Report Service', () => {
       const dataInicio = '2024-01-20';
       const dataFim = '2024-01-31';
 
-      mockXLSX.utils.json_to_sheet.mockReturnValue({});
-      mockXLSX.utils.aoa_to_sheet.mockReturnValue({});
-      mockXLSX.utils.book_new.mockReturnValue({});
-      mockXLSX.utils.book_append_sheet.mockImplementation(() => {});
-      mockXLSX.write.mockReturnValue('mocked-base64-data');
+      xlsxMocks.mockJsonToSheet.mockReturnValue({});
+      xlsxMocks.mockAoaToSheet.mockReturnValue({});
+      xlsxMocks.mockBookNew.mockReturnValue({});
+      xlsxMocks.mockBookAppendSheet.mockImplementation(() => {});
+      xlsxMocks.mockWrite.mockReturnValue('mocked-base64-data');
 
       await gerarRelatorioExcel(dataInicio, dataFim);
 
       // Nenhum agendamento deve ser incluído pois estão antes de 20/01
-      expect(mockXLSX.utils.json_to_sheet).toHaveBeenCalledWith([]);
+      expect(xlsxMocks.mockJsonToSheet).toHaveBeenCalledWith([]);
+    });
+  });
+
+  describe('gerarRelatorioPDF', () => {
+    it('deve gerar HTML com faturamento e serviços concluídos', async () => {
+      const result = await gerarRelatorioPDF('2024-01-01', '2024-01-31');
+
+      expect(result).toContain('Relatório de Faturamento');
+      expect(result).toContain('João Silva');
+      expect(result).toContain('Maria Santos');
+      expect(result).not.toContain('Pedro Oliveira');
+      expect(result).toContain('R$ 270,00');
     });
   });
 
@@ -138,14 +179,11 @@ describe('Report Service', () => {
       const dataInicio = '2024-01-01';
       const dataFim = '2024-01-31';
 
-      // Mock Buffer.from
-      global.Buffer = {
-        from: vi.fn().mockReturnValue('mocked-html-base64'),
-      } as any;
-
       const result = await gerarRelatorioAgendamentosPDF(dataInicio, dataFim);
 
-      expect(result).toBe('data:text/html;base64,mocked-html-base64');
+      expect(result).toContain('Relatório de Agendamentos');
+      expect(result).toContain('João Silva');
+      expect(result).toContain('Pedro Oliveira');
       expect(mockGetAgendamentos).toHaveBeenCalledTimes(1);
     });
   });

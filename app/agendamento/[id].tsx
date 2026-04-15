@@ -13,10 +13,10 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useWhatsApp } from "@/hooks/use-whatsapp";
 import {
-  getAgendamentos, updateAgendamento, deleteAgendamento,
+  getAgendamentos, updateAgendamento, deleteAgendamento, getClientes,
   type Agendamento, type StatusAgendamento,
 } from "@/lib/store";
-import { generateOrdemServiçoPDF, sharePDF } from "@/lib/pdf-service";
+import { generateOrcamentoPDF, generateOrdemServiçoPDF, sharePDF } from "@/lib/pdf-service";
 
 function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -48,6 +48,11 @@ export default function AgendamentoDetalheScreen() {
   // Modal para valor recebido (Android não suporta Alert.prompt)
   const [modalConcluidoVisible, setModalConcluidoVisible] = useState(false);
   const [valorRecebidoInput, setValorRecebidoInput] = useState("");
+  const [novoMovelNome, setNovoMovelNome] = useState("");
+  const [novoMovelValor, setNovoMovelValor] = useState("");
+  const [novoMovelQuantidade, setNovoMovelQuantidade] = useState("1");
+
+  type MovelAgendamento = NonNullable<Agendamento["moveis"]>[number];
 
   useEffect(() => {
     getAgendamentos().then((all) => {
@@ -57,7 +62,79 @@ export default function AgendamentoDetalheScreen() {
     });
   }, [id]);
 
+  useEffect(() => {
+    if (!isEditing || !item) return;
+
+    const enderecoAtual = (editData.endereco ?? item.endereco ?? "").trim();
+    if (enderecoAtual) return;
+
+    getClientes().then((allClientes) => {
+      const cliente = allClientes.find((c) => c.id === item.clienteId);
+      const enderecoCliente = cliente?.endereco?.trim();
+      if (enderecoCliente) {
+        setEditData((prev) => ({ ...prev, endereco: enderecoCliente }));
+      }
+    });
+  }, [isEditing, item, editData.endereco]);
+
   if (!item) return null;
+
+  const getMoveisEdicao = (): MovelAgendamento[] => {
+    const source = (editData.moveis ?? item.moveis ?? []) as MovelAgendamento[];
+    return source.map((m) => ({
+      ...m,
+      valor: Number(m.valor) || 0,
+      quantidade: Math.max(1, Number(m.quantidade) || 1),
+    }));
+  };
+
+  const atualizarMoveisEdicao = (next: MovelAgendamento[]) => {
+    setEditData((prev) => ({ ...prev, moveis: next }));
+  };
+
+  const atualizarQuantidadeMovel = (index: number, delta: number) => {
+    const base = getMoveisEdicao();
+    const next = [...base];
+    const qtd = Math.max(1, (next[index]?.quantidade || 1) + delta);
+    next[index] = { ...next[index], quantidade: qtd };
+    atualizarMoveisEdicao(next);
+  };
+
+  const removerMovel = (index: number) => {
+    const base = getMoveisEdicao();
+    const next = base.filter((_, i) => i !== index);
+    atualizarMoveisEdicao(next);
+  };
+
+  const adicionarNovoMovel = () => {
+    const nome = novoMovelNome.trim();
+    const valor = parseFloat(novoMovelValor.replace(",", ".")) || 0;
+    const quantidade = Math.max(1, parseInt(novoMovelQuantidade, 10) || 1);
+
+    if (!nome) {
+      Alert.alert("Atenção", "Informe o nome do móvel/serviço.");
+      return;
+    }
+    if (valor <= 0) {
+      Alert.alert("Atenção", "Informe um valor válido maior que zero.");
+      return;
+    }
+
+    const base = getMoveisEdicao();
+    const next: MovelAgendamento[] = [
+      ...base,
+      {
+        id: Math.random().toString(36).slice(2),
+        servicoNome: nome,
+        valor,
+        quantidade,
+      },
+    ];
+    atualizarMoveisEdicao(next);
+    setNovoMovelNome("");
+    setNovoMovelValor("");
+    setNovoMovelQuantidade("1");
+  };
 
   function changeStatus() {
     Alert.alert("Alterar Status", undefined, [
@@ -112,8 +189,21 @@ export default function AgendamentoDetalheScreen() {
 
   async function salvarEdicoes() {
     try {
-      await updateAgendamento(item!.id, editData);
-      setItem({ ...item!, ...editData });
+      const payload: Partial<Agendamento> = { ...editData };
+      const moveisAtualizados = getMoveisEdicao();
+
+      if (moveisAtualizados.length > 0) {
+        const valorTotal = moveisAtualizados.reduce(
+          (sum, m) => sum + (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
+          0
+        );
+        payload.moveis = moveisAtualizados;
+        payload.valor = valorTotal;
+        payload.tipoServico = moveisAtualizados[0].servicoNome;
+      }
+
+      await updateAgendamento(item!.id, payload);
+      setItem({ ...item!, ...payload });
       setIsEditing(false);
       Alert.alert("Sucesso", "Agendamento atualizado com sucesso!");
     } catch (err) {
@@ -159,6 +249,65 @@ export default function AgendamentoDetalheScreen() {
       setValorRecebidoInput(String(item!.valor));
       setModalConcluidoVisible(true);
     }
+  }
+
+  function abrirEdicao() {
+    setIsEditing(true);
+  }
+
+  async function gerarOrcamento(tipo: "pdf" | "img") {
+    if (generatingPDF) return;
+    try {
+      setGeneratingPDF(true);
+      const currentItem = item!;
+
+      const servicos = (currentItem.moveis && currentItem.moveis.length > 0)
+        ? currentItem.moveis.map((m) => ({
+            nome: m.servicoNome,
+            quantidade: Number(m.quantidade) || 1,
+            valorUnitario: Number(m.valor) || 0,
+            valor: (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
+          }))
+        : [{
+            nome: currentItem.tipoServico || "Serviço",
+            quantidade: 1,
+            valorUnitario: Number(currentItem.valor) || 0,
+            valor: Number(currentItem.valor) || 0,
+          }];
+
+      const filePath = await generateOrcamentoPDF({
+        clienteNome: currentItem.clienteNome,
+        clienteTel: currentItem.clienteTelefone,
+        clienteEmail: "",
+        data: currentItem.data,
+        hora: currentItem.hora,
+        endereco: currentItem.endereco || "",
+        servicos,
+        total: Number(currentItem.valor) || 0,
+        descricao: currentItem.descricao,
+      });
+
+      await sharePDF(filePath, `orcamento_${currentItem.clienteNome}`);
+
+      if (tipo === "img") {
+        Alert.alert(
+          "Orçamento (IMG)",
+          "A versão atual abre um arquivo compartilhável. Se preferir imagem, abra e salve/capture como imagem."
+        );
+      }
+    } catch (err) {
+      Alert.alert("Erro", "Não foi possível gerar o orçamento.");
+    } finally {
+      setGeneratingPDF(false);
+    }
+  }
+
+  function abrirAcoesOrcamento() {
+    Alert.alert("Orçamento", "Escolha o formato", [
+      { text: "PDF", onPress: () => gerarOrcamento("pdf") },
+      { text: "IMG", onPress: () => gerarOrcamento("img") },
+      { text: "Cancelar", style: "cancel" },
+    ]);
   }
 
   if (isEditing) {
@@ -219,6 +368,69 @@ export default function AgendamentoDetalheScreen() {
               value={String(editData.valor || item.valor)}
               onChangeText={(text) => setEditData({ ...editData, valor: parseFloat(text) || 0 })}
             />
+          </View>
+
+          {/* Móveis e Quantidade */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.muted }]}>MÓVEIS / SERVIÇOS</Text>
+
+            {getMoveisEdicao().map((movel, index) => {
+              const subtotal = (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1);
+              return (
+                <View key={movel.id || String(index)} style={[styles.movelItem, { borderColor: colors.border }]}> 
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.rowLabel, { color: colors.foreground }]}>{movel.servicoNome}</Text>
+                    <Text style={[styles.rowValue, { color: colors.muted }]}>R$ {subtotal.toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.movelControls}>
+                    <TouchableOpacity style={styles.movelQtyBtn} onPress={() => atualizarQuantidadeMovel(index, -1)}>
+                      <MaterialIcons name="remove" size={18} color={colors.primary} />
+                    </TouchableOpacity>
+                    <Text style={[styles.rowValue, { color: colors.foreground }]}>{movel.quantidade}x</Text>
+                    <TouchableOpacity style={styles.movelQtyBtn} onPress={() => atualizarQuantidadeMovel(index, 1)}>
+                      <MaterialIcons name="add" size={18} color={colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.movelQtyBtn} onPress={() => removerMovel(index)}>
+                      <MaterialIcons name="delete-outline" size={18} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, color: colors.foreground }]}
+              placeholder="Nome do móvel/serviço"
+              placeholderTextColor={colors.muted}
+              value={novoMovelNome}
+              onChangeText={setNovoMovelNome}
+            />
+            <View style={styles.movelAddRow}>
+              <TextInput
+                style={[styles.input, styles.movelAddValue, { borderColor: colors.border, color: colors.foreground }]}
+                placeholder="Valor"
+                placeholderTextColor={colors.muted}
+                keyboardType="decimal-pad"
+                value={novoMovelValor}
+                onChangeText={setNovoMovelValor}
+              />
+              <TextInput
+                style={[styles.input, styles.movelAddQty, { borderColor: colors.border, color: colors.foreground }]}
+                placeholder="Qtd"
+                placeholderTextColor={colors.muted}
+                keyboardType="number-pad"
+                value={novoMovelQuantidade}
+                onChangeText={(t) => setNovoMovelQuantidade(t.replace(/\D/g, ""))}
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.contactBtn, { backgroundColor: colors.primary + "15" }]}
+              onPress={adicionarNovoMovel}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="playlist-add" size={20} color={colors.primary} />
+              <Text style={[styles.contactBtnText, { color: colors.primary }]}>Adicionar móvel</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Endereço */}
@@ -320,7 +532,7 @@ export default function AgendamentoDetalheScreen() {
           <MaterialIcons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Agendamento</Text>
-        <TouchableOpacity onPress={() => setIsEditing(true)} activeOpacity={0.7}>
+        <TouchableOpacity onPress={abrirEdicao} activeOpacity={0.7}>
           <MaterialIcons name="edit" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -342,6 +554,23 @@ export default function AgendamentoDetalheScreen() {
           <Row label="Horário" value={item.hora} />
           <Row label="Serviço" value={item.tipoServico} />
           <Row label="Valor Orçado" value={formatMoney(item.valor)} highlight />
+
+          {!!item.moveis?.length && (
+            <View style={{ marginTop: 10, gap: 6 }}>
+              <Text style={[styles.cardTitle, { color: colors.muted }]}>Itens do Agendamento</Text>
+              {item.moveis.map((movel) => {
+                const subtotal = (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1);
+                return (
+                  <View key={movel.id} style={styles.row}>
+                    <Text style={[styles.rowLabel, { color: colors.foreground }]}>
+                      {movel.servicoNome} ({movel.quantidade}x)
+                    </Text>
+                    <Text style={[styles.rowValue, { color: colors.muted }]}>R$ {subtotal.toFixed(2)}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
           
           {/* Mostrar valor recebido se agendamento foi concluído */}
           {item.status === "concluido" && item.valorRecebido !== undefined && (
@@ -425,6 +654,20 @@ export default function AgendamentoDetalheScreen() {
               <MaterialIcons name="chat" size={20} color="#25D366" />
               <Text style={[styles.contactBtnText, { color: "#25D366" }]}>
                 {whatsappLoading ? "Enviando..." : "WhatsApp"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.miniActionRow}>
+            <TouchableOpacity
+              style={[styles.miniActionBtn, { backgroundColor: colors.primary + "15" }]}
+              onPress={abrirAcoesOrcamento}
+              activeOpacity={0.8}
+              disabled={generatingPDF}
+            >
+              <MaterialIcons name="description" size={16} color={colors.primary} />
+              <Text style={[styles.miniActionText, { color: colors.primary }]}>
+                {generatingPDF ? "Gerando..." : "Orçamento PDF/IMG"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -586,6 +829,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  miniActionRow: {
+    marginTop: 10,
+  },
+  miniActionBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  miniActionText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   deleteBtn: {
     flexDirection: "row",
     justifyContent: "center",
@@ -598,6 +857,38 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  movelItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 8,
+    marginBottom: 8,
+  },
+  movelControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  movelQtyBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  movelAddRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  movelAddValue: {
+    flex: 2,
+  },
+  movelAddQty: {
+    flex: 1,
   },
   label: {
     fontSize: 14,
