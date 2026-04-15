@@ -18,7 +18,53 @@ import {
   type Cliente, type Servico,
 } from "@/lib/store";
 
+// Componente memoizado para item de contato
+const ContatoItem = memo(({ item, clientes, colors, onPress }: {
+  item: Contacts.Contact;
+  clientes: Cliente[];
+  colors: any;
+  onPress: (contato: Contacts.Contact) => void;
+}) => {
+  const tel = item.phoneNumbers?.[0]?.number?.replace(/\D/g, "") ?? "";
+  const jaCadastrado = clientes.some(c => c.telefone === tel);
+  return (
+    <TouchableOpacity
+      style={[styles.contatoItem, { borderBottomColor: colors.border }]}
+      onPress={() => onPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.contatoAvatar, { backgroundColor: colors.primary + "15" }]}>
+        <Text style={[styles.contatoAvatarText, { color: colors.primary }]}>
+          {(item.name ?? "?").charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      <View style={styles.contatoInfo}>
+        <Text style={[styles.contatoNome, { color: colors.foreground }]}>{item.name ?? "Sem nome"}</Text>
+        <Text style={[styles.contatoTel, { color: colors.muted }]}>
+          {item.phoneNumbers?.[0]?.number ?? ""}
+        </Text>
+      </View>
+      {jaCadastrado && (
+        <View style={[styles.jaCadastradoBadge, { backgroundColor: colors.primary + "20" }]}>
+          <Text style={[styles.jaCadastradoText, { color: colors.primary }]}>Cadastrado</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
 
+// Tipo para item de móvel/serviço no agendamento
+interface ItemMovel {
+  id: string;
+  servicoId: string;
+  servicoNome: string;
+  valor: string;
+  quantidade: number;
+  temRetorno?: boolean;
+  dataRetorno?: string;
+  horaRetorno?: string;
+  enderecoRetorno?: string;
+}
 
 // Componente memoizado para item de móvel
 const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: {
@@ -68,7 +114,8 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
     </View>
   );
 });
-  const colors = useColors();
+
+export default function NovoAgendamentoScreen() {
   const router = useRouter();
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -81,18 +128,6 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
   const [valor, setValor] = useState("");
   const [descricao, setDescricao] = useState("");
 
-  // Múltiplos móveis/serviços
-  interface ItemMovel {
-    id: string;
-    servicoId: string;
-    servicoNome: string;
-    valor: string;
-    quantidade: number;
-    temRetorno?: boolean;
-    dataRetorno?: string;
-    horaRetorno?: string;
-    enderecoRetorno?: string;
-  }
   const [moveis, setMoveis] = useState<ItemMovel[]>([]);
   const [temRetorno, setTemRetorno] = useState(false);
   const [dataRetorno, setDataRetorno] = useState("");
@@ -241,7 +276,7 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
 
     // Calcular valor total dos móveis
     const valorTotal = moveisParaSalvar.reduce((sum, movel) => {
-      const valor = parseFloat(movel.valor || "0");
+      const valor = parseFloat((movel.valor || "0").replace(",", "."));
       return sum + (valor * movel.quantidade);
     }, 0);
 
@@ -282,6 +317,8 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
     } finally {
       setSaving(false);
     }
+  }, [clienteSelecionado, moveis, servicoSelecionado, valor, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, router]);
+
   // Callbacks para otimizar re-renders
   const handleUpdateQuantidade = useCallback((index: number, delta: number) => {
     setMoveis(prev => {
@@ -581,7 +618,7 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
           <View style={[styles.resumoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.resumoTitle, { color: colors.foreground }]}>Resumo de Valores</Text>
             {moveis.map((movel, idx) => {
-              const valor = parseFloat(movel.valor || "0");
+              const valor = parseFloat((movel.valor || "0").replace(",", "."));
               const total = valor * movel.quantidade;
               return (
                 <View key={idx} style={[styles.resumoRow, { borderBottomColor: colors.border }]}>
@@ -596,7 +633,7 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
             })}
             {(() => {
               const valorTotal = moveis.reduce((sum, movel) => {
-                const valor = parseFloat(movel.valor || "0");
+                const valor = parseFloat((movel.valor || "0").replace(",", "."));
                 return sum + (valor * movel.quantidade);
               }, 0);
               const valorAgendamento = temRetorno ? valorTotal / 2 : valorTotal;
