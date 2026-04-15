@@ -258,9 +258,9 @@ export default function NovoAgendamentoScreen() {
   const salvar = useCallback(async () => {
     if (!clienteSelecionado) { Alert.alert("Atenção", "Selecione um cliente."); return; }
     
-    // Se não há móveis adicionados, mas há serviço selecionado, adicionar automaticamente
-    let moveisParaSalvar = moveis;
-    if (moveis.length === 0 && servicoSelecionado && valor) {
+    // Inclui automaticamente o item que está preenchido no formulário, mesmo se já houver outros na lista
+    let moveisParaSalvar = [...moveis];
+    if (servicoSelecionado && valor) {
       const quantidadeInicial = Math.max(1, parseInt(quantidadeMovel, 10) || 1);
       const novoMovel: ItemMovel = {
         id: Math.random().toString(36).slice(2),
@@ -269,7 +269,16 @@ export default function NovoAgendamentoScreen() {
         valor: valor,
         quantidade: quantidadeInicial,
       };
-      moveisParaSalvar = [novoMovel];
+
+      const itemJaAdicionado = moveisParaSalvar.some((movel) =>
+        movel.servicoId === novoMovel.servicoId
+        && movel.valor === novoMovel.valor
+        && movel.quantidade === novoMovel.quantidade
+      );
+
+      if (!itemJaAdicionado) {
+        moveisParaSalvar.push(novoMovel);
+      }
     }
     
     if (moveisParaSalvar.length === 0) { Alert.alert("Atenção", "Adicione pelo menos um móvel/serviço."); return; }
@@ -349,6 +358,8 @@ export default function NovoAgendamentoScreen() {
       quantidade,
     };
     setMoveis(prev => [...prev, novoMovel]);
+    setServicoSelecionado(null);
+    setValor("");
     setQuantidadeMovel("1");
   }, [servicoSelecionado, valor, quantidadeMovel]);
 
