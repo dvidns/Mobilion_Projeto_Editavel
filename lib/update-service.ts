@@ -1,8 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
-const UPDATE_CHECK_KEY = "@montafacil:last_update_check";
 const UPDATE_AVAILABLE_KEY = "@montafacil:update_available";
-const CHECK_INTERVAL = 60 * 60 * 1000; // 1 hora
+
+// URL da API pública do EAS que retorna o build mais recente do projeto
+const EAS_PROJECT_ID = "232068b3-acba-4de1-b633-dd491f53b984";
+const EAS_API_URL = `https://api.expo.dev/v2/projects/${EAS_PROJECT_ID}/builds?platform=android&distribution=internal&limit=1`;
 
 export interface UpdateStatus {
   isAvailable: boolean;
@@ -10,50 +13,77 @@ export interface UpdateStatus {
   isReady: boolean;
   currentVersion: string;
   newVersion?: string;
+  downloadUrl?: string;
   error?: string;
 }
 
+function getCurrentVersion(): string {
+  return (Constants.expoConfig?.version ?? Constants.manifest?.version ?? "1.0.0") as string;
+}
+
 /**
- * Verificar se há atualizações disponíveis
- * Nota: Atualizações OTA desabilitadas para compatibilidade com build Android
+ * Verifica se há uma versão mais recente disponível consultando a API do EAS.
+ * Compara o versionCode (appBuildVersion) do build mais recente com o atual.
  */
 export async function checkForUpdates(): Promise<UpdateStatus> {
+  const currentVersion = getCurrentVersion();
   try {
-    console.log("ℹ️ Verificação de atualizações desabilitada (OTA não suportado)");
-    
+    const resp = await fetch(EAS_API_URL, {
+      headers: { Accept: "application/json" },
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    const builds: any[] = json?.data ?? json?.builds ?? [];
+
+    if (!builds.length) {
+      return { isAvailable: false, isDownloading: false, isReady: false, currentVersion };
+    }
+
+    const latest = builds[0];
+    const latestAppBuildVersion = String(latest?.appBuildVersion ?? "");
+    const currentBuildVersion = String(Constants.expoConfig?.android?.versionCode ?? 0);
+    const downloadUrl: string | undefined = latest?.artifacts?.applicationArchiveUrl ?? undefined;
+
+    // Considera disponível se há build mais novo e existe URL de download
+    const isAvailable =
+      !!latestAppBuildVersion &&
+      !!currentBuildVersion &&
+      Number(latestAppBuildVersion) > Number(currentBuildVersion) &&
+      !!downloadUrl;
+
     const status: UpdateStatus = {
-      isAvailable: false,
+      isAvailable,
       isDownloading: false,
       isReady: false,
-      currentVersion: "1.0.0",
+      currentVersion,
+      newVersion: isAvailable ? latestAppBuildVersion : undefined,
+      downloadUrl: isAvailable ? downloadUrl : undefined,
     };
 
+    await AsyncStorage.setItem(UPDATE_AVAILABLE_KEY, JSON.stringify(status));
     return status;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "Erro desconhecido";
-    console.error("❌ Erro ao verificar atualizações:", errorMsg);
-
     return {
       isAvailable: false,
       isDownloading: false,
       isReady: false,
-      currentVersion: "1.0.0",
+      currentVersion,
       error: errorMsg,
     };
   }
 }
 
 /**
- * Baixar e instalar atualização
- * Nota: Atualizações OTA desabilitadas para compatibilidade com build Android
+ * Abre o link de download da atualização no navegador.
  */
-export async function downloadAndInstallUpdate(): Promise<boolean> {
+export async function downloadAndInstallUpdate(downloadUrl?: string): Promise<boolean> {
   try {
-    console.log("ℹ️ Atualizações OTA não suportadas nesta versão");
-    return false;
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : "Erro desconhecido";
-    console.error("❌ Erro ao baixar atualização:", errorMsg);
+    const { Linking } = await import("react-native");
+    const url = downloadUrl ?? "https://expo.dev/accounts/dvidns/projects/montador_moveis_app";
+    await Linking.openURL(url);
+    return true;
+  } catch {
     return false;
   }
 }
@@ -63,7 +93,6 @@ export async function downloadAndInstallUpdate(): Promise<boolean> {
  */
 export async function clearUpdateStatus(): Promise<void> {
   await AsyncStorage.removeItem(UPDATE_AVAILABLE_KEY);
-  await AsyncStorage.removeItem(UPDATE_CHECK_KEY);
 }
 
 /**

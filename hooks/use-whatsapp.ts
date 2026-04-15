@@ -3,13 +3,14 @@ import { Alert, Linking, Platform } from "react-native";
 
 /**
  * Hook para gerenciar envios de WhatsApp.
- * Tenta abrir WhatsApp Business direto, sem verificação prévia.
- * Se falhar, oferece opção de tentar com Normal.
+ * No Android, prioriza o esquema nativo do WhatsApp para permitir
+ * que o sistema pergunte qual app abrir (quando houver mais de um).
+ * Se falhar, usa wa.me como fallback.
  */
 export function useWhatsApp() {
   const [loading, setLoading] = useState(false);
 
-  // Enviar mensagem via WhatsApp Business
+  // Enviar mensagem via WhatsApp
   const enviar = useCallback(async (clienteTelefone: string, mensagem: string) => {
     setLoading(true);
     try {
@@ -26,57 +27,25 @@ export function useWhatsApp() {
       // Codificar mensagem
       const encoded = encodeURIComponent(mensagem);
       
-      // Tentar abrir WhatsApp Business via wa.me
-      const waUrl = `https://wa.me/${telFull}?text=${encoded}`;
-      
-      try {
-        await Linking.openURL(waUrl);
-        setLoading(false);
-        return;
-      } catch (err) {
-        // Se wa.me falhar, tentar intent específico do Business
-        if (Platform.OS === "android") {
-          try {
-            const businessIntent = `intent://send?phone=${telFull}&text=${encoded}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
-            await Linking.openURL(businessIntent);
-            setLoading(false);
-            return;
-          } catch (err2) {
-            // Se Business falhar, oferecer tentar Normal
-            Alert.alert(
-              "WhatsApp Business não encontrado",
-              "Deseja tentar com WhatsApp Normal?",
-              [
-                {
-                  text: "Cancelar",
-                  onPress: () => setLoading(false),
-                  style: "cancel",
-                },
-                {
-                  text: "Tentar com Normal",
-                  onPress: async () => {
-                    try {
-                      const normalIntent = `intent://send?phone=${telFull}&text=${encoded}#Intent;scheme=whatsapp;package=com.whatsapp;end`;
-                      await Linking.openURL(normalIntent);
-                      setLoading(false);
-                    } catch (err3) {
-                      Alert.alert("Erro", "WhatsApp não está instalado.");
-                      setLoading(false);
-                    }
-                  },
-                },
-              ]
-            );
-            return;
-          }
+      if (Platform.OS === "android") {
+        // Em Android, este esquema costuma disparar o seletor de app
+        // (WhatsApp / WhatsApp Business) quando aplicável.
+        const whatsappSchemeUrl = `whatsapp://send?phone=${telFull}&text=${encoded}`;
+        try {
+          await Linking.openURL(whatsappSchemeUrl);
+          setLoading(false);
+          return;
+        } catch {
+          // Fallback para link web caso o esquema nativo não esteja disponível.
         }
-        
-        // No iOS, se wa.me falhar, mostrar erro
-        Alert.alert("Erro", "WhatsApp não está instalado ou não foi possível abrir.");
-        setLoading(false);
       }
+
+      const waUrl = `https://wa.me/${telFull}?text=${encoded}`;
+      await Linking.openURL(waUrl);
+      setLoading(false);
+      return;
     } catch (err) {
-      Alert.alert("Erro", "Não foi possível abrir o WhatsApp.");
+      Alert.alert("Erro", "WhatsApp não está instalado ou não foi possível abrir.");
       setLoading(false);
     }
   }, []);

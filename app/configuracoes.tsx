@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useColors } from "@/hooks/use-colors";
 import { getAvaliacaoLink, saveAvaliacaoLink, getLembretePersonalizado, saveLembretePersonalizado } from "@/lib/store";
+import { checkForUpdates, downloadAndInstallUpdate, type UpdateStatus } from "@/lib/update-service";
 
 const KEY_PERFIL = "@montafacil:perfil";
 
@@ -29,6 +30,28 @@ export default function ConfiguracoesScreen() {
   const [avaliacaoLink, setAvaliacaoLink] = useState("");
   const [lembrete, setLembrete] = useState("");
   const [saving, setSaving] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+
+  const verificarAtualizacao = useCallback(async () => {
+    setIsCheckingUpdate(true);
+    setUpdateStatus(null);
+    try {
+      const status = await checkForUpdates();
+      setUpdateStatus(status);
+    } catch {
+      setUpdateStatus({ isAvailable: false, isDownloading: false, isReady: false, currentVersion: "1.0.0", error: "Falha ao verificar" });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, []);
+
+  const baixarAtualizacao = useCallback(async () => {
+    setIsDownloadingUpdate(true);
+    await downloadAndInstallUpdate(updateStatus?.downloadUrl);
+    setIsDownloadingUpdate(false);
+  }, [updateStatus]);
 
   useEffect(() => {
     Promise.all([
@@ -149,6 +172,82 @@ export default function ConfiguracoesScreen() {
           </View>
         </View>
 
+        {/* ── Verificar Atualização ── */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.muted }]}>ATUALIZAÇÃO</Text>
+
+          {/* Botão verificar */}
+          <TouchableOpacity
+            style={[styles.updateCheckBtn, { borderColor: colors.primary }]}
+            onPress={verificarAtualizacao}
+            disabled={isCheckingUpdate || isDownloadingUpdate}
+            activeOpacity={0.75}
+          >
+            {isCheckingUpdate ? (
+              <ActivityIndicator size={18} color={colors.primary} />
+            ) : (
+              <MaterialIcons name="system-update" size={18} color={colors.primary} />
+            )}
+            <Text style={[styles.updateCheckText, { color: colors.primary }]}>
+              {isCheckingUpdate ? "Verificando..." : "Verificar atualização"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Resultado da verificação */}
+          {!isCheckingUpdate && updateStatus && (
+            <View style={[styles.updateResultBox,
+              updateStatus.isAvailable
+                ? { backgroundColor: colors.primary + "18", borderColor: colors.primary }
+                : updateStatus.error
+                  ? { backgroundColor: colors.error + "18", borderColor: colors.error }
+                  : { backgroundColor: colors.success + "18", borderColor: colors.success },
+            ]}>
+              {updateStatus.isAvailable ? (
+                <>
+                  <View style={styles.updateResultRow}>
+                    <MaterialIcons name="new-releases" size={20} color={colors.primary} />
+                    <Text style={[styles.updateResultTitle, { color: colors.primary }]}>
+                      Nova versão disponível!
+                    </Text>
+                  </View>
+                  <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
+                    Build {updateStatus.newVersion} pronto para instalar.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.downloadBtn, { backgroundColor: colors.primary }]}
+                    onPress={baixarAtualizacao}
+                    disabled={isDownloadingUpdate}
+                    activeOpacity={0.8}
+                  >
+                    {isDownloadingUpdate ? (
+                      <ActivityIndicator size={16} color="#fff" />
+                    ) : (
+                      <MaterialIcons name="cloud-download" size={16} color="#fff" />
+                    )}
+                    <Text style={styles.downloadBtnText}>
+                      {isDownloadingUpdate ? "Abrindo..." : "Baixar e instalar"}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : updateStatus.error ? (
+                <View style={styles.updateResultRow}>
+                  <MaterialIcons name="wifi-off" size={20} color={colors.error} />
+                  <Text style={[styles.updateResultTitle, { color: colors.error }]}>
+                    Sem conexão ou erro na verificação
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.updateResultRow}>
+                  <MaterialIcons name="check-circle" size={20} color={colors.success} />
+                  <Text style={[styles.updateResultTitle, { color: colors.success }]}>
+                    Você já tem a versão mais recente
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
         <TouchableOpacity
           style={[styles.dangerBtn, { borderColor: colors.error }]}
           onPress={limparDados}
@@ -221,5 +320,55 @@ const styles = StyleSheet.create({
   dangerText: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  updateCheckBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  updateCheckText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  updateResultBox: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  updateResultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  updateResultTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  updateResultDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  downloadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  downloadBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
