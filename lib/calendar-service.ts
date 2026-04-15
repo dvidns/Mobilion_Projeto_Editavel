@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Calendar from "expo-calendar";
 import { getAgendamentos, type Agendamento } from "@/lib/store";
 
@@ -8,6 +9,75 @@ export interface CalendarEvent {
   endDate: Date;
   notes: string;
   location?: string;
+}
+
+const CALENDAR_EVENT_MAP_KEY = "@montafacil:calendar_event_ids";
+
+interface CalendarSyncEntry {
+  key: string;
+  title: string;
+  startDate: Date;
+  endDate: Date;
+  notes: string;
+  location?: string;
+}
+
+async function loadCalendarEventMap(): Promise<Record<string, string>> {
+  try {
+    const raw = await AsyncStorage.getItem(CALENDAR_EVENT_MAP_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    console.error("Erro ao carregar mapa de eventos do calendário:", err);
+    return {};
+  }
+}
+
+async function saveCalendarEventMap(map: Record<string, string>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CALENDAR_EVENT_MAP_KEY, JSON.stringify(map));
+  } catch (err) {
+    console.error("Erro ao salvar mapa de eventos do calendário:", err);
+  }
+}
+
+function buildCalendarNotes(agendamento: Agendamento): string {
+  return `Cliente: ${agendamento.clienteNome}\nTelefone: ${agendamento.clienteTelefone}\nValor: R$ ${agendamento.valor.toFixed(2)}\nDescrição: ${agendamento.descricao || "N/A"}`;
+}
+
+function buildSyncEntries(agendamento: Agendamento): CalendarSyncEntry[] {
+  const [year, month, day] = agendamento.data.split("-").map(Number);
+  const [hour, minute] = agendamento.hora.split(":").map(Number);
+  const startDate = new Date(year, month - 1, day, hour, minute);
+  const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+
+  const entries: CalendarSyncEntry[] = [
+    {
+      key: `agendamento_${agendamento.id}`,
+      title: `${agendamento.tipoServico} - ${agendamento.clienteNome}`,
+      startDate,
+      endDate,
+      notes: buildCalendarNotes(agendamento),
+      location: agendamento.endereco || "",
+    },
+  ];
+
+  if (agendamento.temRetorno && agendamento.dataRetorno && agendamento.horaRetorno) {
+    const [returnYear, returnMonth, returnDay] = agendamento.dataRetorno.split("-").map(Number);
+    const [returnHour, returnMinute] = agendamento.horaRetorno.split(":").map(Number);
+    const returnStartDate = new Date(returnYear, returnMonth - 1, returnDay, returnHour, returnMinute);
+    const returnEndDate = new Date(returnStartDate.getTime() + 2 * 60 * 60 * 1000);
+
+    entries.push({
+      key: `retorno_${agendamento.id}`,
+      title: `🔁 Retorno - ${agendamento.tipoServico}`,
+      startDate: returnStartDate,
+      endDate: returnEndDate,
+      notes: `${buildCalendarNotes(agendamento)}\nEndereço de retorno: ${agendamento.enderecoRetorno || agendamento.endereco || "N/A"}`,
+      location: agendamento.enderecoRetorno || agendamento.endereco || "",
+    });
+  }
+
+  return entries;
 }
 
 /**
@@ -44,18 +114,15 @@ export async function createCalendarEvent(
   agendamento: Agendamento
 ): Promise<string | null> {
   try {
-    const [year, month, day] = agendamento.data.split("-").map(Number);
-    const [hour, minute] = agendamento.hora.split(":").map(Number);
-
-    const startDate = new Date(year, month - 1, day, hour, minute);
-    const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // 2 horas de duração
+    const entries = buildSyncEntries(agendamento);
+    const entry = entries[0];
 
     const eventId = await Calendar.createEventAsync(calendarId, {
-      title: `${agendamento.tipoServico} - ${agendamento.clienteNome}`,
-      startDate,
-      endDate,
-      notes: `Cliente: ${agendamento.clienteNome}\nTelefone: ${agendamento.clienteTelefone}\nValor: R$ ${agendamento.valor.toFixed(2)}\nDescrição: ${agendamento.descricao || "N/A"}`,
-      location: agendamento.endereco || "",
+      title: entry.title,
+      startDate: entry.startDate,
+      endDate: entry.endDate,
+      notes: entry.notes,
+      location: entry.location || "",
       timeZone: "America/Sao_Paulo",
     });
 
@@ -64,6 +131,41 @@ export async function createCalendarEvent(
   } catch (err) {
     console.error("❌ Erro ao criar evento:", err);
     return null;
+  }
+}
+
+async function createCalendarEntry(calendarId: string, entry: CalendarSyncEntry): Promise<string | null> {
+  try {
+    const eventId = await Calendar.createEventAsync(calendarId, {
+      title: entry.title,
+      startDate: entry.startDate,
+      endDate: entry.endDate,
+      notes: entry.notes,
+      location: entry.location || "",
+      timeZone: "America/Sao_Paulo",
+    });
+
+    return eventId;
+  } catch (err) {
+    console.error("❌ Erro ao criar evento de calendário:", err);
+    return null;
+  }
+}
+
+async function updateCalendarEntry(calendarId: string, eventId: string, entry: CalendarSyncEntry): Promise<boolean> {
+  try {
+    await Calendar.updateEventAsync(eventId, {
+      title: entry.title,
+      startDate: entry.startDate,
+      endDate: entry.endDate,
+      notes: entry.notes,
+      location: entry.location || "",
+      timeZone: "America/Sao_Paulo",
+    });
+    return true;
+  } catch (err) {
+    console.error("❌ Erro ao atualizar evento de calendário:", err);
+    return false;
   }
 }
 
@@ -76,22 +178,10 @@ export async function updateCalendarEvent(
   agendamento: Agendamento
 ): Promise<boolean> {
   try {
-    const [year, month, day] = agendamento.data.split("-").map(Number);
-    const [hour, minute] = agendamento.hora.split(":").map(Number);
+    const entries = buildSyncEntries(agendamento);
+    const entry = entries[0];
 
-    const startDate = new Date(year, month - 1, day, hour, minute);
-    const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
-
-    await Calendar.updateEventAsync(eventId, {
-      title: `${agendamento.tipoServico} - ${agendamento.clienteNome}`,
-      startDate,
-      endDate,
-      notes: `Cliente: ${agendamento.clienteNome}\nTelefone: ${agendamento.clienteTelefone}\nValor: R$ ${agendamento.valor.toFixed(2)}\nDescrição: ${agendamento.descricao || "N/A"}`,
-      location: agendamento.endereco || "",
-    });
-
-    console.log("✅ Evento atualizado no calendário");
-    return true;
+    return await updateCalendarEntry(calendarId, eventId, entry);
   } catch (err) {
     console.error("❌ Erro ao atualizar evento:", err);
     return false;
@@ -114,40 +204,57 @@ export async function deleteCalendarEvent(eventId: string): Promise<boolean> {
 
 /**
  * Sincronizar todos os agendamentos com calendário
- * Apenas agendamentos da conta logada são sincronizados
+ * Apenas agendamentos não cancelados são sincronizados
  */
 export async function syncAgendamentosToCalendar(calendarId: string, userEmail?: string): Promise<number> {
   try {
     const agendamentos = await getAgendamentos();
-
-    // Filtrar agendamentos que não estão cancelados
-    let agendamentosAtivos = agendamentos.filter((a) => a.status !== "cancelado");
-    
-    // Sincronizar todos os agendamentos ativos
-    // (Compatibilidade com múltiplos usuários pode ser adicionada depois)
-
+    const eventMap = await loadCalendarEventMap();
     let sincronizados = 0;
 
-    for (const agendamento of agendamentosAtivos) {
-      // Usar ID do agendamento como ID do evento (se existir)
-      const eventId = `montafacil_${agendamento.id}`;
+    for (const agendamento of agendamentos) {
+      const entries = buildSyncEntries(agendamento);
 
-      try {
-        // Tentar criar evento
-        const result = await createCalendarEvent(calendarId, agendamento);
-        if (result) sincronizados++;
-      } catch {
-        // Se falhar, tentar atualizar
-        try {
-          const updated = await updateCalendarEvent(calendarId, eventId, agendamento);
-          if (updated) sincronizados++;
-        } catch {
-          console.warn(`Não foi possível sincronizar agendamento ${agendamento.id}`);
+      if (agendamento.status === "cancelado") {
+        for (const entry of entries) {
+          const mappedEventId = eventMap[entry.key];
+          if (mappedEventId) {
+            await deleteCalendarEvent(mappedEventId);
+            delete eventMap[entry.key];
+          }
+        }
+        continue;
+      }
+
+      for (const entry of entries) {
+        const mappedEventId = eventMap[entry.key];
+        let synced = false;
+
+        if (mappedEventId) {
+          synced = await updateCalendarEntry(calendarId, mappedEventId, entry);
+          if (!synced) {
+            const created = await createCalendarEntry(calendarId, entry);
+            if (created) {
+              eventMap[entry.key] = created;
+              synced = true;
+            }
+          }
+        } else {
+          const created = await createCalendarEntry(calendarId, entry);
+          if (created) {
+            eventMap[entry.key] = created;
+            synced = true;
+          }
+        }
+
+        if (synced) {
+          sincronizados += 1;
         }
       }
     }
 
-    console.log(`✅ ${sincronizados} agendamentos sincronizados com o calendário`);
+    await saveCalendarEventMap(eventMap);
+    console.log(`✅ ${sincronizados} eventos sincronizados com o calendário`);
     return sincronizados;
   } catch (err) {
     console.error("❌ Erro ao sincronizar agendamentos:", err);

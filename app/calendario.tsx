@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import * as Calendar from "expo-calendar";
@@ -48,7 +49,7 @@ export default function CalendarioScreen() {
         setSelectedCalendar(defaultCal);
 
         // Carregar último sync
-        const lastSyncStr = localStorage.getItem("@montafacil:last_sync");
+        const lastSyncStr = await AsyncStorage.getItem("@montafacil:last_sync");
         if (lastSyncStr) {
           setLastSync(parseInt(lastSyncStr, 10));
         }
@@ -77,8 +78,9 @@ export default function CalendarioScreen() {
             setSyncing(true);
             try {
               const count = await syncAgendamentosToCalendar(selectedCalendar.id, user?.email || "");
-              setLastSync(Date.now());
-              localStorage.setItem("@montafacil:last_sync", Date.now().toString());
+              const now = Date.now();
+              setLastSync(now);
+              await AsyncStorage.setItem("@montafacil:last_sync", now.toString());
               Alert.alert(
                 "Sucesso!",
                 `${count} agendamento(s) sincronizado(s) com o calendário.`

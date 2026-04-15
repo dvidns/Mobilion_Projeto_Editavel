@@ -87,8 +87,7 @@
 - [x] Corrigir cálculo de valor do retorno (não dividir novamente por 2)
 - [x] Adicionar nome do serviço no label de retorno ("🔄 Retorno - Nome do Serviço")
 - [x] Testes para validar exibição correta de retorno no calendário
-- [ ] Integração com GitHub para controle de versão
-- [ ] Botão de nuvem para atualização manual do app
+- [x] Botão de nuvem para atualização manual do app
 
 
 ## Correção de Fluxo de Salvamento com Retorno (Sessão Anterior)
@@ -101,4 +100,4 @@
 - [x] Permitir salvamento automático com 1 serviço sem clicar em "Adicionar"
 - [x] Ocultar botão "Adicionar móvel/serviço" quando há apenas 1 serviço
 - [x] Testar fluxo com 1 serviço e retorno
-- [ ] Salvar checkpoint final
+- [x] Salvar checkpoint final

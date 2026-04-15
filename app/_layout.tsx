@@ -20,6 +20,8 @@ import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useAutoBackup } from "@/hooks/use-auto-backup";
+import { useUpdateChecker } from "@/hooks/use-update-checker";
+import { UpdateFloatingButton } from "@/components/ui/update-floating-button";
 
 
 
@@ -36,6 +38,7 @@ export default function RootLayout() {
 
   // Inicializar backup automático
   useAutoBackup();
+  const { updateStatus, isDownloading, downloadUpdate } = useUpdateChecker();
 
 
 
@@ -103,6 +106,11 @@ export default function RootLayout() {
           </Stack>
 
           <StatusBar style="auto" />
+          <UpdateFloatingButton
+            updateStatus={updateStatus}
+            isDownloading={isDownloading}
+            onDownload={downloadUpdate}
+          />
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>
