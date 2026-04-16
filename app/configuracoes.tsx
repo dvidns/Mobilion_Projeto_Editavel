@@ -189,10 +189,16 @@ export default function ConfiguracoesScreen() {
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>BACKUP</Text>
 
           <Text style={[styles.backupInfo, { color: colors.muted }]}>
-            {backupStatus?.lastBackupTime
-              ? `Último backup: ${formatBackupTime(backupStatus.lastBackupTime)}`
+            {backupStatus?.lastBackup
+              ? `Último backup: ${formatBackupTime(backupStatus.lastBackup)}`
               : "Nenhum backup realizado ainda"}
           </Text>
+
+          {!!backupStatus?.lastBackupPath && (
+            <Text style={[styles.backupInfo, { color: colors.muted }]}>
+              Arquivo: {backupStatus.lastBackupPath}
+            </Text>
+          )}
 
           <TouchableOpacity
             style={[styles.updateCheckBtn, { borderColor: colors.primary }]}
@@ -239,8 +245,11 @@ export default function ConfiguracoesScreen() {
             style={[styles.updateCheckBtn, { borderColor: colors.warning ?? "#f59e0b", marginTop: 8 }]}
             onPress={async () => {
               setIsRestoring(true);
-              await restoreFromFile();
+              const restored = await restoreFromFile();
               setIsRestoring(false);
+              if (restored) {
+                getBackupStatus().then(setBackupStatus);
+              }
             }}
             disabled={isRestoring}
             activeOpacity={0.75}
