@@ -28,6 +28,7 @@ function getCurrentVersion(): string {
  */
 export async function checkForUpdates(): Promise<UpdateStatus> {
   const currentVersion = getCurrentVersion();
+  const currentBuildVersion = String(Constants.expoConfig?.android?.versionCode ?? 0);
   try {
     const resp = await fetch(EAS_API_URL, {
       headers: { Accept: "application/json" },
@@ -37,12 +38,17 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     const builds: any[] = json?.data ?? json?.builds ?? [];
 
     if (!builds.length) {
-      return { isAvailable: false, isDownloading: false, isReady: false, currentVersion };
+      return {
+        isAvailable: false,
+        isDownloading: false,
+        isReady: false,
+        currentVersion,
+        currentBuildVersion,
+      };
     }
 
     const latest = builds[0];
     const latestAppBuildVersion = String(latest?.appBuildVersion ?? "");
-    const currentBuildVersion = String(Constants.expoConfig?.android?.versionCode ?? 0);
     const downloadUrl: string | undefined = latest?.artifacts?.applicationArchiveUrl ?? undefined;
 
     // Considera disponível se há build mais novo e existe URL de download
@@ -71,7 +77,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
       isDownloading: false,
       isReady: false,
       currentVersion,
-      currentBuildVersion: String(Constants.expoConfig?.android?.versionCode ?? 0),
+      currentBuildVersion,
       error: errorMsg,
     };
   }

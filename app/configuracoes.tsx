@@ -174,7 +174,9 @@ export default function ConfiguracoesScreen() {
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>SOBRE O APP</Text>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.muted }]}>Versão</Text>
-            <Text style={[styles.infoValue, { color: colors.foreground }]}>1.0.0</Text>
+            <Text style={[styles.infoValue, { color: colors.foreground }]}>
+              {Constants.expoConfig?.version ?? "1.0.0"} (build {Constants.expoConfig?.android?.versionCode ?? 1})
+            </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.muted }]}>Desenvolvido para</Text>
