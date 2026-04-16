@@ -1,8 +1,8 @@
 import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
 
-const bundleId = "space.manus.montador.moveis.app.t20260415";
-const timestamp = "20260415";
+const bundleId = "space.manus.montador.moveis.app.t20260412";
+const timestamp = "20260412";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
@@ -37,6 +37,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
+    versionCode: 6,
     permissions: ["POST_NOTIFICATIONS", "READ_CONTACTS"],
     intentFilters: [
       {

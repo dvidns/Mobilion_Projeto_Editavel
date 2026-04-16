@@ -36,18 +36,6 @@ export default function AgendaScreen() {
   });
   const [selectedDate, setSelectedDate] = useState(today);
   const [allAgendamentos, setAllAgendamentos] = useState<Agendamento[]>([]);
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-
-  const toggleExpanded = (itemId: string, isRetorno: boolean) => {
-    const key = `${itemId}-${isRetorno ? 'retorno' : 'agendamento'}`;
-    const newExpanded = new Set(expandedItems);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedItems(newExpanded);
-  };
 
   const load = useCallback(async () => {
     const all = await getAgendamentos();
@@ -219,10 +207,8 @@ export default function AgendaScreen() {
               const label = item.isRetorno ? `🔄 Retorno - ${item.tipoServico}` : item.tipoServico;
               const bgColor = item.isRetorno ? colors.warning + "18" : colors.primary + "18";
               const textColor = item.isRetorno ? colors.warning : colors.primary;
-              const moveis = item.moveis && item.moveis.length > 0 ? item.moveis : [];
-              const temMultiplosMoveis = moveis.length > 1;
               return (
-                <Card key={`${item.id}-${item.isRetorno ? 'retorno' : 'agendamento'}`} onPress={() => temMultiplosMoveis ? toggleExpanded(item.id, item.isRetorno) : router.push(`/agendamento/${item.id}` as any)}>
+                <Card key={`${item.id}-${item.isRetorno ? 'retorno' : 'agendamento'}`} onPress={() => router.push(`/agendamento/${item.id}` as any)}>
                   <View style={styles.itemRow}>
                     <View style={[styles.timeBox, { backgroundColor: bgColor }]}>
                       <Text style={[styles.timeText, { color: textColor }]}>{hora}</Text>
@@ -261,22 +247,6 @@ export default function AgendaScreen() {
                       <StatusBadge status={item.status} />
                     </View>
                   </View>
-                  
-                  {/* Lista de móveis dentro do card - colapsável */}
-                  {temMultiplosMoveis && expandedItems.has(`${item.id}-${item.isRetorno ? 'retorno' : 'agendamento'}`) && (
-                    <View style={[styles.moveisListContainer, { borderTopColor: colors.border }]}>
-                      {moveis.map((movel, mIdx) => (
-                        <View key={`${item.id}-movel-${mIdx}`} style={[styles.movelListItem, { borderBottomColor: colors.border, borderBottomWidth: mIdx < moveis.length - 1 ? 1 : 0 }]}>
-                          <Text style={[styles.movelNome, { color: colors.foreground }]}>
-                            {movel.servicoNome}
-                          </Text>
-                          <Text style={[styles.movelValor, { color: colors.success }]}>
-                            {formatMoney(movel.valor)}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
                 </Card>
               );
             })}
@@ -460,11 +430,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 10,
     overflow: "hidden",
-  },
-  moveisListContainer: {
-    borderTopWidth: 1,
-    marginTop: 12,
-    paddingTop: 12,
   },
   movelItem: {
     flexDirection: "row",
