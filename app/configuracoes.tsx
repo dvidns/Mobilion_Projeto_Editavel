@@ -5,6 +5,7 @@ import {
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import Constants from "expo-constants";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,10 @@ import { Button } from "@/components/ui/button";
 import { useColors } from "@/hooks/use-colors";
 import { getAvaliacaoLink, saveAvaliacaoLink, getLembretePersonalizado, saveLembretePersonalizado } from "@/lib/store";
 import { checkForUpdates, downloadAndInstallUpdate, type UpdateStatus } from "@/lib/update-service";
+import {
+  getBackupStatus, saveBackupLocally, exportBackupToShare, restoreFromFile,
+  formatBackupTime, type BackupStatus,
+} from "@/lib/backup-service";
 
 const KEY_PERFIL = "@montafacil:perfil";
 
@@ -33,6 +38,10 @@ export default function ConfiguracoesScreen() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const verificarAtualizacao = useCallback(async () => {
     setIsCheckingUpdate(true);
@@ -68,6 +77,7 @@ export default function ConfiguracoesScreen() {
       setAvaliacaoLink(link);
       setLembrete(lemb);
     });
+    getBackupStatus().then(setBackupStatus);
   }, []);
 
   async function salvar() {
@@ -172,9 +182,87 @@ export default function ConfiguracoesScreen() {
           </View>
         </View>
 
+        {/* ── Backup ── */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.muted }]}>BACKUP</Text>
+
+          <Text style={[styles.backupInfo, { color: colors.muted }]}>
+            {backupStatus?.lastBackupTime
+              ? `Último backup: ${formatBackupTime(backupStatus.lastBackupTime)}`
+              : "Nenhum backup realizado ainda"}
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.updateCheckBtn, { borderColor: colors.primary }]}
+            onPress={async () => {
+              setIsBackingUp(true);
+              const path = await saveBackupLocally();
+              setIsBackingUp(false);
+              if (path) {
+                getBackupStatus().then(setBackupStatus);
+                Alert.alert("Backup salvo!", "Dados salvos localmente com sucesso.");
+              }
+            }}
+            disabled={isBackingUp}
+            activeOpacity={0.75}
+          >
+            {isBackingUp
+              ? <ActivityIndicator size={18} color={colors.primary} />
+              : <MaterialIcons name="save" size={18} color={colors.primary} />}
+            <Text style={[styles.updateCheckText, { color: colors.primary }]}>
+              {isBackingUp ? "Salvando..." : "Fazer backup agora"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.updateCheckBtn, { borderColor: colors.primary, marginTop: 8 }]}
+            onPress={async () => {
+              setIsExporting(true);
+              await exportBackupToShare();
+              setIsExporting(false);
+              getBackupStatus().then(setBackupStatus);
+            }}
+            disabled={isExporting}
+            activeOpacity={0.75}
+          >
+            {isExporting
+              ? <ActivityIndicator size={18} color={colors.primary} />
+              : <MaterialIcons name="share" size={18} color={colors.primary} />}
+            <Text style={[styles.updateCheckText, { color: colors.primary }]}>
+              {isExporting ? "Preparando..." : "Exportar (Drive / Pasta...)"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.updateCheckBtn, { borderColor: colors.warning ?? "#f59e0b", marginTop: 8 }]}
+            onPress={async () => {
+              setIsRestoring(true);
+              await restoreFromFile();
+              setIsRestoring(false);
+            }}
+            disabled={isRestoring}
+            activeOpacity={0.75}
+          >
+            {isRestoring
+              ? <ActivityIndicator size={18} color={colors.warning ?? "#f59e0b"} />
+              : <MaterialIcons name="restore" size={18} color={colors.warning ?? "#f59e0b"} />}
+            <Text style={[styles.updateCheckText, { color: colors.warning ?? "#f59e0b" }]}>
+              {isRestoring ? "Restaurando..." : "Restaurar backup"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* ── Verificar Atualização ── */}
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>ATUALIZAÇÃO</Text>
+
+          {/* Versão instalada */}
+          <View style={[styles.infoRow, { marginBottom: 12 }]}>
+            <Text style={[styles.infoLabel, { color: colors.muted }]}>Versão instalada</Text>
+            <Text style={[styles.infoValue, { color: colors.foreground }]}>
+              {Constants.expoConfig?.version ?? "1.0.0"} (build {Constants.expoConfig?.android?.versionCode ?? 1})
+            </Text>
+          </View>
 
           {/* Botão verificar */}
           <TouchableOpacity
@@ -320,6 +408,10 @@ const styles = StyleSheet.create({
   dangerText: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  backupInfo: {
+    fontSize: 13,
+    marginBottom: 10,
   },
   updateCheckBtn: {
     flexDirection: "row",

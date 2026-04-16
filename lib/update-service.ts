@@ -12,6 +12,7 @@ export interface UpdateStatus {
   isDownloading: boolean;
   isReady: boolean;
   currentVersion: string;
+  currentBuildVersion: string;
   newVersion?: string;
   downloadUrl?: string;
   error?: string;
@@ -56,6 +57,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
       isDownloading: false,
       isReady: false,
       currentVersion,
+      currentBuildVersion,
       newVersion: isAvailable ? latestAppBuildVersion : undefined,
       downloadUrl: isAvailable ? downloadUrl : undefined,
     };
@@ -69,6 +71,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
       isDownloading: false,
       isReady: false,
       currentVersion,
+      currentBuildVersion: String(Constants.expoConfig?.android?.versionCode ?? 0),
       error: errorMsg,
     };
   }

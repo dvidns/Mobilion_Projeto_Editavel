@@ -4,6 +4,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useState, useEffect } from "react";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -51,6 +52,8 @@ export default function AgendamentoDetalheScreen() {
   const [novoMovelNome, setNovoMovelNome] = useState("");
   const [novoMovelValor, setNovoMovelValor] = useState("");
   const [novoMovelQuantidade, setNovoMovelQuantidade] = useState("1");
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerMode, setTimePickerMode] = useState<"hora" | "retorno">("hora");
 
   type MovelAgendamento = NonNullable<Agendamento["moveis"]>[number];
 
@@ -336,13 +339,16 @@ export default function AgendamentoDetalheScreen() {
           {/* Hora */}
           <View>
             <Text style={[styles.label, { color: colors.muted }]}>Horário</Text>
-            <TextInput
-              style={[styles.input, { borderColor: colors.border, color: colors.foreground }]}
-              placeholder="HH:MM"
-              placeholderTextColor={colors.muted}
-              value={editData.hora || item.hora}
-              onChangeText={(text) => setEditData({ ...editData, hora: text })}
-            />
+            <TouchableOpacity
+              style={[styles.timeBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => { setTimePickerMode("hora"); setShowTimePicker(true); }}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="access-time" size={18} color={colors.primary} />
+              <Text style={[styles.timeBtnText, { color: colors.foreground }]}>
+                {editData.hora || item.hora || "Selecionar horário"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Tipo de Serviço */}
@@ -496,13 +502,16 @@ export default function AgendamentoDetalheScreen() {
 
                 <View>
                   <Text style={[styles.label, { color: colors.muted }]}>Horário do Retorno</Text>
-                  <TextInput
-                    style={[styles.input, { borderColor: colors.border, color: colors.foreground }]}
-                    placeholder="HH:MM"
-                    placeholderTextColor={colors.muted}
-                    value={editData.horaRetorno || item.horaRetorno || ""}
-                    onChangeText={(text) => setEditData({ ...editData, horaRetorno: text })}
-                  />
+                  <TouchableOpacity
+                    style={[styles.timeBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                    onPress={() => { setTimePickerMode("retorno"); setShowTimePicker(true); }}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="access-time" size={18} color={colors.primary} />
+                    <Text style={[styles.timeBtnText, { color: colors.foreground }]}>
+                      {editData.horaRetorno || item.horaRetorno || "Selecionar horário"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 <View>
@@ -521,6 +530,33 @@ export default function AgendamentoDetalheScreen() {
 
           <Button title="Salvar Alterações" onPress={salvarEdicoes} />
         </ScrollView>
+
+        {/* ── TIME PICKER nativo ── */}
+        {showTimePicker && (
+          <DateTimePicker
+            value={(() => {
+              const raw = timePickerMode === "hora"
+                ? (editData.hora || item.hora || "08:00")
+                : (editData.horaRetorno || item.horaRetorno || "08:00");
+              return new Date(`2000-01-01T${raw}:00`);
+            })()}
+            mode="time"
+            display={Platform.OS === "android" ? "clock" : "spinner"}
+            onChange={(event, selectedDate) => {
+              setShowTimePicker(false);
+              if (event.type !== "dismissed" && selectedDate) {
+                const h = String(selectedDate.getHours()).padStart(2, "0");
+                const m = String(selectedDate.getMinutes()).padStart(2, "0");
+                const timeStr = `${h}:${m}`;
+                if (timePickerMode === "hora") {
+                  setEditData((prev) => ({ ...prev, hora: timeStr }));
+                } else {
+                  setEditData((prev) => ({ ...prev, horaRetorno: timeStr }));
+                }
+              }
+            }}
+          />
+        )}
       </ScreenContainer>
     );
   }
@@ -902,6 +938,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     marginBottom: 12,
+  },
+  timeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 12,
+  },
+  timeBtnText: {
+    fontSize: 14,
+    fontWeight: "500",
   },
   checkbox: {
     width: 24,
