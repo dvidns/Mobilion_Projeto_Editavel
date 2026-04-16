@@ -1,5 +1,5 @@
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Modal, TextInput,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Modal,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -8,6 +8,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { getAgendamentos, type Agendamento } from "@/lib/store";
 import { gerarRelatorioExcel, gerarRelatorioPDF, gerarRelatorioCSV } from "@/lib/report-service";
@@ -253,22 +254,16 @@ export default function RelatorioScreen() {
               Baixar Relatório
             </Text>
 
-            <Text style={[styles.modalLabel, { color: colors.muted }]}>Data Início (AAAA-MM-DD):</Text>
-            <TextInput
-              style={[styles.modalInput, { borderColor: colors.border, color: colors.foreground }]}
+            <Text style={[styles.modalLabel, { color: colors.muted }]}>Data Início:</Text>
+            <DatePicker
               value={dataInicio}
-              onChangeText={setDataInicio}
-              placeholder="2025-01-01"
-              placeholderTextColor={colors.muted}
+              onChange={setDataInicio}
             />
 
-            <Text style={[styles.modalLabel, { color: colors.muted }]}>Data Fim (AAAA-MM-DD):</Text>
-            <TextInput
-              style={[styles.modalInput, { borderColor: colors.border, color: colors.foreground }]}
+            <Text style={[styles.modalLabel, { color: colors.muted, marginTop: 12 }]}>Data Fim:</Text>
+            <DatePicker
               value={dataFim}
-              onChangeText={setDataFim}
-              placeholder="2025-01-31"
-              placeholderTextColor={colors.muted}
+              onChange={setDataFim}
             />
 
             <Text style={[styles.modalSub, { color: colors.muted }]}>Escolha o formato:</Text>
