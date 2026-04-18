@@ -34,6 +34,9 @@ jobs:
       - name: Instalar dependências
         run: pnpm install --no-frozen-lockfile
 
+      - name: Expo Prebuild (gerar pasta android)
+        run: npx expo prebuild --platform android --no-install
+
       - name: Gerar debug.keystore
         run: |
           mkdir -p android/app
