@@ -4,16 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      profile:
-        description: "EAS build profile"
-        required: false
-        default: "preview"
-        type: choice
-        options:
-          - preview
-          - production
-          - development
 
 jobs:
   build:
@@ -35,22 +25,37 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
       - name: Instalar dependências
         run: pnpm install --no-frozen-lockfile
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
-      - name: Build APK (${{ github.event.inputs.profile || 'preview' }})
+      - name: Gerar debug.keystore
         run: |
-          eas build \
-            --platform android \
-            --profile ${{ github.event.inputs.profile || 'preview' }} \
-            --non-interactive \
-            --no-wait
+          keytool -genkeypair \
+            -v \
+            -keystore android/app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Link do build
-        run: echo "Acompanhe o build em https://expo.dev/accounts/[sua-conta]/projects/montador_moveis_app/builds"
+      - name: Build APK (assembleRelease)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
