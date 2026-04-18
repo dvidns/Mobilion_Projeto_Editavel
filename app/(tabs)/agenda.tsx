@@ -25,6 +25,25 @@ function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function getValorExibicao(item: Agendamento & { isRetorno?: boolean }) {
+  const valorBase = item.valorRecebido ?? item.valor;
+
+  if (!item.temRetorno) {
+    return valorBase;
+  }
+
+  const totalMoveis = (item.moveis ?? []).reduce(
+    (sum, movel) => sum + (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1),
+    0
+  );
+
+  if (totalMoveis > 0) {
+    return totalMoveis / 2;
+  }
+
+  return valorBase;
+}
+
 export default function AgendaScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -242,7 +261,7 @@ export default function AgendaScreen() {
                     </View>
                     <View style={styles.itemRight}>
                       <Text style={[styles.itemValue, { color: colors.success }]}>
-                        {formatMoney(item.valor)}
+                        {formatMoney(getValorExibicao(item))}
                       </Text>
                       <StatusBadge status={item.status} />
                     </View>
@@ -254,7 +273,7 @@ export default function AgendaScreen() {
               <View style={[styles.totalRow, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
                 <Text style={[styles.totalLabel, { color: colors.muted }]}>TOTAL DO DIA</Text>
                 <Text style={[styles.totalValue, { color: colors.success }]}>
-                  {formatMoney(dayItems.reduce((sum, item) => sum + item.valor, 0))}
+                  {formatMoney(dayItems.reduce((sum, item) => sum + getValorExibicao(item), 0))}
                 </Text>
               </View>
             )}

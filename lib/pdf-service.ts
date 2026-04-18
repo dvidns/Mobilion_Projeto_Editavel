@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system/legacy";
+import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
 /**
@@ -176,16 +176,12 @@ export async function generateOrcamentoPDF(data: {
       </html>
     `;
 
-    // Salvar PDF (simulado - em produção usar biblioteca PDF)
-    const fileName = `orcamento_${data.clienteNome.replace(/\s+/g, '_')}_${Date.now()}.html`;
-    const filePath = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}${fileName}`;
-
     if (Platform.OS !== "web") {
-      await FileSystem.writeAsStringAsync(filePath, html);
-      return filePath;
+      const { uri } = await Print.printToFileAsync({ html });
+      return uri;
     }
 
-    // Web: retornar blob URL
+    // Web: fallback para visualização em nova aba
     const blob = new Blob([html], { type: "text/html" });
     return URL.createObjectURL(blob);
   } catch (err) {
@@ -329,12 +325,9 @@ export async function generateOrdemServiçoPDF(data: {
       </html>
     `;
 
-    const fileName = `ordem_${data.clienteNome.replace(/\s+/g, '_')}_${Date.now()}.html`;
-    const filePath = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}${fileName}`;
-
     if (Platform.OS !== "web") {
-      await FileSystem.writeAsStringAsync(filePath, html);
-      return filePath;
+      const { uri } = await Print.printToFileAsync({ html });
+      return uri;
     }
 
     const blob = new Blob([html], { type: "text/html" });
@@ -358,7 +351,7 @@ export async function sharePDF(filePath: string, fileName: string): Promise<void
 
     // Native: usar Sharing
     await Sharing.shareAsync(filePath, {
-      mimeType: "text/html",
+      mimeType: "application/pdf",
       dialogTitle: `Compartilhar ${fileName}`,
     });
   } catch (err) {

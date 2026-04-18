@@ -1,7 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
+import Constants from "expo-constants";
 import { Alert } from "react-native";
 import {
   getAgendamentos,
@@ -37,6 +38,14 @@ const BACKUP_STATUS_KEY = "@montafacil:backup_status";
 const BACKUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas
 const BACKUP_DIR = (FileSystem.documentDirectory ?? "") + "backups/";
 
+function getInstalledVersion(): string {
+  return (
+    Constants.nativeAppVersion ??
+    Constants.expoConfig?.version ??
+    "1.0.0"
+  );
+}
+
 /**
  * Obter status atual do backup
  */
@@ -68,7 +77,11 @@ export async function prepareBackupData(): Promise<BackupData> {
     getOrcamentos(),
     getAvaliacaoLink(),
   ]);
-  return { timestamp: Date.now(), version: "1.0.0", data: { clientes, agendamentos, orcamentos, avaliacaoLink } };
+  return {
+    timestamp: Date.now(),
+    version: getInstalledVersion(),
+    data: { clientes, agendamentos, orcamentos, avaliacaoLink },
+  };
 }
 
 /**

@@ -23,6 +23,10 @@ function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function getValorExibicao(item: Pick<Agendamento, "valor" | "valorRecebido">) {
+  return item.valorRecebido ?? item.valor;
+}
+
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -138,7 +142,7 @@ export default function HomeScreen() {
               </View>
               <View style={styles.cardRight}>
                 <Text style={[styles.cardValue, { color: colors.success }]}>
-                  {formatMoney(item.valor)}
+                  {formatMoney(getValorExibicao(item))}
                 </Text>
                 <View style={styles.cardActions}>
                   {item.endereco && (

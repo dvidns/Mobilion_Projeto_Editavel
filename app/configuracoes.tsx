@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,6 +26,14 @@ interface Perfil {
   cidade: string;
 }
 
+function getInstalledVersion(): string {
+  return Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "1.0.0";
+}
+
+function getInstalledBuildVersion(): string {
+  return String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 1);
+}
+
 export default function ConfiguracoesScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -42,6 +50,8 @@ export default function ConfiguracoesScreen() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [backupModalOpen, setBackupModalOpen] = useState(false);
 
   const verificarAtualizacao = useCallback(async () => {
     setIsCheckingUpdate(true);
@@ -50,7 +60,14 @@ export default function ConfiguracoesScreen() {
       const status = await checkForUpdates();
       setUpdateStatus(status);
     } catch {
-      setUpdateStatus({ isAvailable: false, isDownloading: false, isReady: false, currentVersion: "1.0.0", error: "Falha ao verificar" });
+      setUpdateStatus({
+        isAvailable: false,
+        isDownloading: false,
+        isReady: false,
+        currentVersion: getInstalledVersion(),
+        currentBuildVersion: getInstalledBuildVersion(),
+        error: "Falha ao verificar",
+      });
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -58,7 +75,10 @@ export default function ConfiguracoesScreen() {
 
   const baixarAtualizacao = useCallback(async () => {
     setIsDownloadingUpdate(true);
-    await downloadAndInstallUpdate(updateStatus?.downloadUrl);
+    const ok = await downloadAndInstallUpdate(updateStatus?.downloadUrl);
+    if (!ok) {
+      Alert.alert("Atualização", "Não foi possível abrir o download do APK agora.");
+    }
     setIsDownloadingUpdate(false);
   }, [updateStatus]);
 
@@ -119,6 +139,54 @@ export default function ConfiguracoesScreen() {
     );
   }
 
+  async function fazerBackupAgora() {
+    setBackupModalOpen(false);
+    try {
+      setIsBackingUp(true);
+      const path = await saveBackupLocally();
+      if (path) {
+        getBackupStatus().then(setBackupStatus);
+        Alert.alert("Backup salvo!", "Dados salvos localmente com sucesso.");
+      } else {
+        Alert.alert("Erro", "Não foi possível salvar o backup agora.");
+      }
+    } catch {
+      Alert.alert("Erro", "Falha inesperada ao salvar backup.");
+    } finally {
+      setIsBackingUp(false);
+    }
+  }
+
+  async function exportarBackup() {
+    setBackupModalOpen(false);
+    try {
+      setIsExporting(true);
+      const exported = await exportBackupToShare();
+      if (!exported) {
+        Alert.alert("Exportação", "Não foi possível exportar o backup agora.");
+      }
+    } catch {
+      Alert.alert("Erro", "Falha inesperada ao exportar backup.");
+    } finally {
+      setIsExporting(false);
+      getBackupStatus().then(setBackupStatus);
+    }
+  }
+
+  async function restaurarBackup() {
+    setBackupModalOpen(false);
+    setIsRestoring(true);
+    const restored = await restoreFromFile();
+    setIsRestoring(false);
+    if (restored) {
+      getBackupStatus().then(setBackupStatus);
+    }
+  }
+
+  function abrirOpcoesBackup() {
+    setBackupModalOpen(true);
+  }
+
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
@@ -171,111 +239,20 @@ export default function ConfiguracoesScreen() {
         <Button title="Salvar Tudo" onPress={salvar} loading={saving} />
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.muted }]}>SOBRE O APP</Text>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.muted }]}>Versão</Text>
-            <Text style={[styles.infoValue, { color: colors.foreground }]}>
-              {Constants.expoConfig?.version ?? "1.0.0"} (build {Constants.expoConfig?.android?.versionCode ?? 1})
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: colors.muted }]}>Desenvolvido para</Text>
-            <Text style={[styles.infoValue, { color: colors.foreground }]}>Montadores de Móveis</Text>
-          </View>
-        </View>
+          <Text style={[styles.sectionTitle, { color: colors.muted }]}>ATUALIZAÇÃO E SOBRE O APP</Text>
 
-        {/* ── Backup ── */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.muted }]}>BACKUP</Text>
-
-          <Text style={[styles.backupInfo, { color: colors.muted }]}>
-            {backupStatus?.lastBackup
-              ? `Último backup: ${formatBackupTime(backupStatus.lastBackup)}`
-              : "Nenhum backup realizado ainda"}
-          </Text>
-
-          {!!backupStatus?.lastBackupPath && (
-            <Text style={[styles.backupInfo, { color: colors.muted }]}>
-              Arquivo: {backupStatus.lastBackupPath}
-            </Text>
-          )}
-
-          <TouchableOpacity
-            style={[styles.updateCheckBtn, { borderColor: colors.primary }]}
-            onPress={async () => {
-              setIsBackingUp(true);
-              const path = await saveBackupLocally();
-              setIsBackingUp(false);
-              if (path) {
-                getBackupStatus().then(setBackupStatus);
-                Alert.alert("Backup salvo!", "Dados salvos localmente com sucesso.");
-              }
-            }}
-            disabled={isBackingUp}
-            activeOpacity={0.75}
-          >
-            {isBackingUp
-              ? <ActivityIndicator size={18} color={colors.primary} />
-              : <MaterialIcons name="save" size={18} color={colors.primary} />}
-            <Text style={[styles.updateCheckText, { color: colors.primary }]}>
-              {isBackingUp ? "Salvando..." : "Fazer backup agora"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.updateCheckBtn, { borderColor: colors.primary, marginTop: 8 }]}
-            onPress={async () => {
-              setIsExporting(true);
-              await exportBackupToShare();
-              setIsExporting(false);
-              getBackupStatus().then(setBackupStatus);
-            }}
-            disabled={isExporting}
-            activeOpacity={0.75}
-          >
-            {isExporting
-              ? <ActivityIndicator size={18} color={colors.primary} />
-              : <MaterialIcons name="share" size={18} color={colors.primary} />}
-            <Text style={[styles.updateCheckText, { color: colors.primary }]}>
-              {isExporting ? "Preparando..." : "Exportar (Drive / Pasta...)"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.updateCheckBtn, { borderColor: colors.warning ?? "#f59e0b", marginTop: 8 }]}
-            onPress={async () => {
-              setIsRestoring(true);
-              const restored = await restoreFromFile();
-              setIsRestoring(false);
-              if (restored) {
-                getBackupStatus().then(setBackupStatus);
-              }
-            }}
-            disabled={isRestoring}
-            activeOpacity={0.75}
-          >
-            {isRestoring
-              ? <ActivityIndicator size={18} color={colors.warning ?? "#f59e0b"} />
-              : <MaterialIcons name="restore" size={18} color={colors.warning ?? "#f59e0b"} />}
-            <Text style={[styles.updateCheckText, { color: colors.warning ?? "#f59e0b" }]}>
-              {isRestoring ? "Restaurando..." : "Restaurar backup"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Verificar Atualização ── */}
-        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.muted }]}>ATUALIZAÇÃO</Text>
-
-          {/* Versão instalada */}
           <View style={[styles.infoRow, { marginBottom: 12 }]}>
             <Text style={[styles.infoLabel, { color: colors.muted }]}>Versão instalada</Text>
             <Text style={[styles.infoValue, { color: colors.foreground }]}>
-              {Constants.expoConfig?.version ?? "1.0.0"} (build {Constants.expoConfig?.android?.versionCode ?? 1})
+              {getInstalledVersion()} (build {getInstalledBuildVersion()})
             </Text>
           </View>
 
-          {/* Botão verificar */}
+          <View style={[styles.infoRow, { marginBottom: 12 }]}> 
+            <Text style={[styles.infoLabel, { color: colors.muted }]}>Desenvolvido para</Text>
+            <Text style={[styles.infoValue, { color: colors.foreground }]}>Montadores de Móveis</Text>
+          </View>
+
           <TouchableOpacity
             style={[styles.updateCheckBtn, { borderColor: colors.primary }]}
             onPress={verificarAtualizacao}
@@ -292,7 +269,6 @@ export default function ConfiguracoesScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Resultado da verificação */}
           {!isCheckingUpdate && updateStatus && (
             <View style={[styles.updateResultBox,
               updateStatus.isAvailable
@@ -324,25 +300,100 @@ export default function ConfiguracoesScreen() {
                       <MaterialIcons name="cloud-download" size={16} color="#fff" />
                     )}
                     <Text style={styles.downloadBtnText}>
-                      {isDownloadingUpdate ? "Abrindo..." : "Baixar e instalar"}
+                      {isDownloadingUpdate ? "Abrindo..." : "Baixar APK"}
                     </Text>
                   </TouchableOpacity>
                 </>
               ) : updateStatus.error ? (
-                <View style={styles.updateResultRow}>
-                  <MaterialIcons name="wifi-off" size={20} color={colors.error} />
-                  <Text style={[styles.updateResultTitle, { color: colors.error }]}>
-                    Sem conexão ou erro na verificação
+                <>
+                  <View style={styles.updateResultRow}>
+                    <MaterialIcons name="wifi-off" size={20} color={colors.error} />
+                    <Text style={[styles.updateResultTitle, { color: colors.error }]}> 
+                      Não foi possível verificar atualizações
+                    </Text>
+                  </View>
+                  <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
+                    {updateStatus.error}
                   </Text>
-                </View>
+                </>
               ) : (
-                <View style={styles.updateResultRow}>
-                  <MaterialIcons name="check-circle" size={20} color={colors.success} />
-                  <Text style={[styles.updateResultTitle, { color: colors.success }]}>
-                    Você já tem a versão mais recente
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.updateResultRow}>
+                    <MaterialIcons name="check-circle" size={20} color={colors.success} />
+                    <Text style={[styles.updateResultTitle, { color: colors.success }]}> 
+                      Você já tem a versão mais recente
+                    </Text>
+                  </View>
+                  {!!updateStatus.downloadUrl && (
+                    <TouchableOpacity
+                      style={[styles.downloadBtn, { backgroundColor: colors.primary }]}
+                      onPress={baixarAtualizacao}
+                      disabled={isDownloadingUpdate}
+                      activeOpacity={0.8}
+                    >
+                      {isDownloadingUpdate ? (
+                        <ActivityIndicator size={16} color="#fff" />
+                      ) : (
+                        <MaterialIcons name="cloud-download" size={16} color="#fff" />
+                      )}
+                      <Text style={styles.downloadBtnText}>
+                        {isDownloadingUpdate ? "Abrindo..." : "Abrir link do APK"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </>
               )}
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
+          <TouchableOpacity
+            style={styles.cardHeader}
+            onPress={() => setBackupOpen((value) => !value)}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.sectionTitle, styles.cardTitle, { color: colors.muted }]}>BACKUP</Text>
+            <MaterialIcons
+              name={backupOpen ? "expand-less" : "expand-more"}
+              size={22}
+              color={colors.muted}
+            />
+          </TouchableOpacity>
+
+          {backupOpen && (
+            <View style={styles.cardContent}>
+              <Text style={[styles.backupInfo, { color: colors.muted }]}> 
+                {backupStatus?.lastBackup
+                  ? `Último backup: ${formatBackupTime(backupStatus.lastBackup)}`
+                  : "Nenhum backup realizado ainda"}
+              </Text>
+
+              {!!backupStatus?.lastBackupPath && (
+                <Text style={[styles.backupInfo, { color: colors.muted }]}> 
+                  Arquivo: {backupStatus.lastBackupPath}
+                </Text>
+              )}
+
+              <TouchableOpacity
+                style={[styles.updateCheckBtn, { borderColor: colors.primary }]}
+                onPress={abrirOpcoesBackup}
+                disabled={isBackingUp || isExporting || isRestoring}
+                activeOpacity={0.75}
+              >
+                {isBackingUp || isExporting || isRestoring
+                  ? <ActivityIndicator size={18} color={colors.primary} />
+                  : <MaterialIcons name="save" size={18} color={colors.primary} />}
+                <Text style={[styles.updateCheckText, { color: colors.primary }]}> 
+                  {isBackingUp
+                    ? "Salvando..."
+                    : isExporting
+                      ? "Preparando..."
+                      : isRestoring
+                        ? "Restaurando..."
+                        : "Gerenciar backup"}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -356,6 +407,67 @@ export default function ConfiguracoesScreen() {
           <Text style={[styles.dangerText, { color: colors.error }]}>Limpar todos os dados</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={backupModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBackupModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Gerenciar backup</Text>
+            <Text style={[styles.modalDescription, { color: colors.muted }]}>Escolha o que deseja fazer com seus dados.</Text>
+
+            <TouchableOpacity
+              style={[styles.modalAction, { borderColor: colors.border }]}
+              onPress={fazerBackupAgora}
+              disabled={isBackingUp || isExporting || isRestoring}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name="save" size={18} color={colors.primary} />
+              <View style={styles.modalActionContent}>
+                <Text style={[styles.modalActionTitle, { color: colors.foreground }]}>Fazer backup agora</Text>
+                <Text style={[styles.modalActionSubtitle, { color: colors.muted }]}>Salva uma cópia local no aparelho.</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalAction, { borderColor: colors.border }]}
+              onPress={exportarBackup}
+              disabled={isBackingUp || isExporting || isRestoring}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name="ios-share" size={18} color={colors.primary} />
+              <View style={styles.modalActionContent}>
+                <Text style={[styles.modalActionTitle, { color: colors.foreground }]}>Exportar backup</Text>
+                <Text style={[styles.modalActionSubtitle, { color: colors.muted }]}>Compartilha o arquivo para outro app ou local.</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalAction, { borderColor: colors.border }]}
+              onPress={restaurarBackup}
+              disabled={isBackingUp || isExporting || isRestoring}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name="restore" size={18} color={colors.primary} />
+              <View style={styles.modalActionContent}>
+                <Text style={[styles.modalActionTitle, { color: colors.foreground }]}>Restaurar backup</Text>
+                <Text style={[styles.modalActionSubtitle, { color: colors.muted }]}>Importa um arquivo salvo anteriormente.</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modalCancelBtn, { borderColor: colors.border }]}
+              onPress={() => setBackupModalOpen(false)}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.modalCancelText, { color: colors.foreground }]}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -389,6 +501,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.8,
     marginBottom: 8,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardTitle: {
+    marginBottom: 0,
+  },
+  cardContent: {
+    marginTop: 12,
   },
   sectionDesc: {
     fontSize: 13,
@@ -473,5 +596,57 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.35)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  modalDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+  },
+  modalActionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  modalActionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalActionSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  modalCancelBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

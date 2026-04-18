@@ -23,6 +23,18 @@ function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function toNumberSafe(value: unknown, fallback = 0): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  if (typeof value === "string") {
+    const normalized = value.includes(",")
+      ? value.replace(/\./g, "").replace(",", ".")
+      : value;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
 export default function OrcamentosScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -59,7 +71,7 @@ export default function OrcamentosScreen() {
     if (existing) {
       setItens(itens.map((i) => i.servicoId === s.id ? { ...i, quantidade: i.quantidade + 1 } : i));
     } else {
-      setItens([...itens, { servicoId: s.id, servicoNome: s.nome, quantidade: 1, valor: s.valorSugerido }]);
+      setItens([...itens, { servicoId: s.id, servicoNome: s.nome, quantidade: 1, valor: toNumberSafe(s.valorSugerido, 0) }]);
     }
     setModalServico(false);
   }
@@ -68,7 +80,11 @@ export default function OrcamentosScreen() {
     setItens(itens.filter((i) => i.servicoId !== id));
   }
 
-  const total = itens.reduce((s, i) => s + i.valor * i.quantidade, 0);
+  const total = itens.reduce((s, i) => {
+    const valor = toNumberSafe(i.valor, 0);
+    const quantidade = Math.max(1, Math.trunc(toNumberSafe(i.quantidade, 1)));
+    return s + valor * quantidade;
+  }, 0);
 
   async function salvarOrcamento() {
     if (!clienteSel) { Alert.alert("Atenção", "Selecione um cliente."); return; }
@@ -160,7 +176,7 @@ export default function OrcamentosScreen() {
                 </Text>
                 <StatusBadge status={item.status} />
               </View>
-              <Text style={[styles.orcTotal, { color: colors.success }]}>{formatMoney(item.total)}</Text>
+              <Text style={[styles.orcTotal, { color: colors.success }]}>{formatMoney(toNumberSafe(item.total, 0))}</Text>
             </View>
             <View style={[styles.orcActions, { borderTopColor: colors.border }]}>
               <TouchableOpacity

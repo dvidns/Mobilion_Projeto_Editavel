@@ -60,6 +60,7 @@ interface ItemMovel {
   servicoNome: string;
   valor: string;
   quantidade: number;
+  observacao?: string;
   temRetorno?: boolean;
   dataRetorno?: string;
   horaRetorno?: string;
@@ -104,6 +105,9 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
         <Text style={[styles.movelValor, { color: colors.muted, marginTop: 4 }]}>
           R$ {valorUnitario.toFixed(2)} → R$ {valorTotal.toFixed(2)}
         </Text>
+        {!!movel.observacao?.trim() && (
+          <Text style={[styles.movelValor, { color: colors.muted, marginTop: 2 }]}>📝 {movel.observacao}</Text>
+        )}
       </View>
       <TouchableOpacity
         onPress={() => onRemove(index)}
@@ -127,6 +131,7 @@ export default function NovoAgendamentoScreen() {
   const [endereco, setEndereco] = useState("");
   const [valor, setValor] = useState("");
   const [quantidadeMovel, setQuantidadeMovel] = useState("1");
+  const [observacaoMovel, setObservacaoMovel] = useState("");
   const [descricao, setDescricao] = useState("");
 
   const [moveis, setMoveis] = useState<ItemMovel[]>([]);
@@ -268,12 +273,14 @@ export default function NovoAgendamentoScreen() {
         servicoNome: servicoSelecionado.nome,
         valor: valor,
         quantidade: quantidadeInicial,
+        observacao: observacaoMovel.trim() || undefined,
       };
 
       const itemJaAdicionado = moveisParaSalvar.some((movel) =>
         movel.servicoId === novoMovel.servicoId
         && movel.valor === novoMovel.valor
         && movel.quantidade === novoMovel.quantidade
+        && (movel.observacao || "") === (novoMovel.observacao || "")
       );
 
       if (!itemJaAdicionado) {
@@ -330,7 +337,7 @@ export default function NovoAgendamentoScreen() {
     } finally {
       setSaving(false);
     }
-  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, router]);
+  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, observacaoMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, router]);
 
   // Callbacks para otimizar re-renders
   const handleUpdateQuantidade = useCallback((index: number, delta: number) => {
@@ -356,12 +363,14 @@ export default function NovoAgendamentoScreen() {
       servicoNome: servicoSelecionado.nome,
       valor,
       quantidade,
+      observacao: observacaoMovel.trim() || undefined,
     };
     setMoveis(prev => [...prev, novoMovel]);
     setServicoSelecionado(null);
     setValor("");
     setQuantidadeMovel("1");
-  }, [servicoSelecionado, valor, quantidadeMovel]);
+    setObservacaoMovel("");
+  }, [servicoSelecionado, valor, quantidadeMovel, observacaoMovel]);
 
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
@@ -497,6 +506,15 @@ export default function NovoAgendamentoScreen() {
           onChangeText={setValor}
           placeholder="0,00"
           keyboardType="decimal-pad"
+        />
+
+        <Input
+          label="Observação do Item"
+          value={observacaoMovel}
+          onChangeText={setObservacaoMovel}
+          placeholder="Detalhe específico deste móvel/serviço"
+          multiline
+          numberOfLines={2}
         />
 
         <View style={styles.movelConfigRow}>

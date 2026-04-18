@@ -26,8 +26,10 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: false,
     bundleIdentifier: env.iosBundleId,
+    buildNumber: "12",
   },
   android: {
+    versionCode: 12,
     adaptiveIcon: {
       backgroundColor: "#1A73E8",
       foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -90,6 +92,7 @@ const config: ExpoConfig = {
     reactCompiler: true,
   },
   extra: {
+    apkDownloadUrl: process.env.EXPO_PUBLIC_APK_URL ?? "http://192.168.1.8:8080/app-release.apk",
     eas: {
       projectId: "232068b3-acba-4de1-b633-dd491f53b984",
     },

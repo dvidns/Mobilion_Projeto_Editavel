@@ -53,7 +53,13 @@ export interface Agendamento {
   endereco?: string;
   valor: number;
   status: StatusAgendamento;
-  moveis?: Array<{ id: string; servicoNome: string; valor: number; quantidade: number }>; // Múltiplos móveis/serviços
+  moveis?: Array<{
+    id: string;
+    servicoNome: string;
+    valor: number;
+    quantidade: number;
+    observacao?: string;
+  }>; // Múltiplos móveis/serviços
   temRetorno?: boolean; // Se tem retorno para finalizar
   dataRetorno?: string; // Data do retorno
   horaRetorno?: string; // Hora do retorno
@@ -188,6 +194,58 @@ function uuid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+function toNumberSafe(value: unknown, fallback = 0): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    const normalized = trimmed.includes(",")
+      ? trimmed.replace(/\./g, "").replace(",", ".")
+      : trimmed;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function normalizeItemOrcamento(item: Partial<ItemOrcamento>): ItemOrcamento {
+  return {
+    servicoId: String(item.servicoId ?? ""),
+    servicoNome: String(item.servicoNome ?? "Serviço"),
+    quantidade: Math.max(1, Math.trunc(toNumberSafe(item.quantidade, 1))),
+    valor: toNumberSafe(item.valor, 0),
+    modulos: item.modulos !== undefined ? toNumberSafe(item.modulos, 0) : undefined,
+    valorPorModulo: item.valorPorModulo !== undefined ? toNumberSafe(item.valorPorModulo, 0) : undefined,
+  };
+}
+
+function calcularTotalOrcamento(itens: ItemOrcamento[]): number {
+  return itens.reduce((soma, item) => {
+    const valor = toNumberSafe(item.valor, 0);
+    const quantidade = Math.max(1, Math.trunc(toNumberSafe(item.quantidade, 1)));
+    return soma + valor * quantidade;
+  }, 0);
+}
+
+function normalizeOrcamento(raw: Partial<Orcamento>): Orcamento {
+  const itensRaw = Array.isArray(raw.itens) ? raw.itens : [];
+  const itens = itensRaw.map((i) => normalizeItemOrcamento(i));
+  const totalItens = calcularTotalOrcamento(itens);
+  const total = itens.length > 0 ? totalItens : toNumberSafe(raw.total, 0);
+
+  return {
+    id: String(raw.id ?? uuid()),
+    clienteId: String(raw.clienteId ?? ""),
+    clienteNome: String(raw.clienteNome ?? ""),
+    clienteTelefone: String(raw.clienteTelefone ?? ""),
+    itens,
+    total,
+    status: (raw.status ?? "pendente") as StatusOrcamento,
+    observacoes: raw.observacoes,
+    criadoEm: raw.criadoEm ?? new Date().toISOString(),
+  };
+}
+
 // ─── Clientes ─────────────────────────────────────────────────────────────────
 
 export async function getClientes(): Promise<Cliente[]> {
@@ -235,6 +293,7 @@ export async function getAgendamentos(): Promise<Agendamento[]> {
           servicoNome: a.tipoServico || "Serviço",
           valor: a.valor ?? 0,
           quantidade: 1,
+          observacao: undefined,
         }],
       };
     }
@@ -248,6 +307,17 @@ export async function getAgendamentos(): Promise<Agendamento[]> {
           servicoNome: m.nome || a.tipoServico || "Serviço",
           valor: m.valor ?? a.valor ?? 0,
           quantidade: m.quantidade ?? 1,
+          observacao: m.observacao,
+        })),
+      };
+    }
+    // Garantir compatibilidade para registros sem observacao
+    if (primeiroMovel && !("observacao" in primeiroMovel)) {
+      return {
+        ...a,
+        moveis: a.moveis.map((m: any) => ({
+          ...m,
+          observacao: undefined,
         })),
       };
     }
@@ -322,29 +392,69 @@ export async function addServico(data: Omit<Servico, "id">): Promise<Servico> {
 export async function updateServico(id: string, data: Partial<Servico>): Promise<void> {
   const servicos = await getServicos();
   await saveServicos(servicos.map((s) => (s.id === id ? { ...s, ...data } : s)));
+
+  // Se o valor sugerido mudou, sincroniza os orçamentos que usam esse serviço.
+  if (data.valorSugerido !== undefined) {
+    await syncOrcamentosByServicoId(id, toNumberSafe(data.valorSugerido, 0));
+  }
 }
 
 // ─── Orçamentos ───────────────────────────────────────────────────────────────
 
 export async function getOrcamentos(): Promise<Orcamento[]> {
   const raw = await AsyncStorage.getItem(KEYS.orcamentos);
-  return raw ? JSON.parse(raw) : [];
+  if (!raw) return [];
+
+  const parsed = JSON.parse(raw) as Array<Partial<Orcamento>>;
+  const normalized = parsed.map((orcamento) => normalizeOrcamento(orcamento));
+
+  // Persiste migração silenciosa para evitar inconsistências nas próximas leituras.
+  if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+    await saveOrcamentos(normalized);
+  }
+
+  return normalized;
 }
 
 export async function saveOrcamentos(orcamentos: Orcamento[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.orcamentos, JSON.stringify(orcamentos));
+  const normalized = orcamentos.map((o) => normalizeOrcamento(o));
+  await AsyncStorage.setItem(KEYS.orcamentos, JSON.stringify(normalized));
 }
 
 export async function addOrcamento(data: Omit<Orcamento, "id" | "criadoEm">): Promise<Orcamento> {
   const orcamentos = await getOrcamentos();
-  const novo: Orcamento = { ...data, id: uuid(), criadoEm: new Date().toISOString() };
+  const novo: Orcamento = normalizeOrcamento({ ...data, id: uuid(), criadoEm: new Date().toISOString() });
   await saveOrcamentos([...orcamentos, novo]);
   return novo;
 }
 
 export async function updateOrcamento(id: string, data: Partial<Orcamento>): Promise<void> {
   const orcamentos = await getOrcamentos();
-  await saveOrcamentos(orcamentos.map((o) => (o.id === id ? { ...o, ...data } : o)));
+  await saveOrcamentos(
+    orcamentos.map((o) => (o.id === id ? normalizeOrcamento({ ...o, ...data }) : o))
+  );
+}
+
+async function syncOrcamentosByServicoId(servicoId: string, novoValor: number): Promise<void> {
+  const orcamentos = await getOrcamentos();
+  let updated = false;
+
+  const sincronizados = orcamentos.map((orcamento) => {
+    let touched = false;
+    const itens = orcamento.itens.map((item) => {
+      if (item.servicoId !== servicoId) return item;
+      touched = true;
+      return { ...item, valor: novoValor };
+    });
+
+    if (!touched) return orcamento;
+    updated = true;
+    return normalizeOrcamento({ ...orcamento, itens });
+  });
+
+  if (updated) {
+    await saveOrcamentos(sincronizados);
+  }
 }
 
 export async function deleteOrcamento(id: string): Promise<void> {

@@ -3,8 +3,10 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as Sharing from "expo-sharing";
+import { captureRef } from "react-native-view-shot";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -52,8 +54,10 @@ export default function AgendamentoDetalheScreen() {
   const [novoMovelNome, setNovoMovelNome] = useState("");
   const [novoMovelValor, setNovoMovelValor] = useState("");
   const [novoMovelQuantidade, setNovoMovelQuantidade] = useState("1");
+  const [novoMovelObservacao, setNovoMovelObservacao] = useState("");
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timePickerMode, setTimePickerMode] = useState<"hora" | "retorno">("hora");
+  const orcamentoCaptureRef = useRef<View>(null);
 
   type MovelAgendamento = NonNullable<Agendamento["moveis"]>[number];
 
@@ -131,12 +135,14 @@ export default function AgendamentoDetalheScreen() {
         servicoNome: nome,
         valor,
         quantidade,
+        observacao: novoMovelObservacao.trim() || undefined,
       },
     ];
     atualizarMoveisEdicao(next);
     setNovoMovelNome("");
     setNovoMovelValor("");
     setNovoMovelQuantidade("1");
+    setNovoMovelObservacao("");
   };
 
   function changeStatus() {
@@ -200,8 +206,9 @@ export default function AgendamentoDetalheScreen() {
           (sum, m) => sum + (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
           0
         );
+        const temRetornoAtivo = payload.temRetorno ?? item.temRetorno;
         payload.moveis = moveisAtualizados;
-        payload.valor = valorTotal;
+        payload.valor = temRetornoAtivo ? valorTotal / 2 : valorTotal;
         payload.tipoServico = moveisAtualizados[0].servicoNome;
       }
 
@@ -235,27 +242,56 @@ export default function AgendamentoDetalheScreen() {
   function marcarComoConcluido() {
     if (item!.status === "concluido") return;
 
-    if (Platform.OS === "ios") {
-      Alert.prompt(
-        "Valor Recebido",
-        `Qual foi o valor realmente recebido?\n\nValor orçado: ${formatMoney(item!.valor)}`,
-        [
-          { text: "Cancelar", style: "cancel" },
-          { text: "Confirmar", onPress: async (valorText?: string) => confirmarConclusao(valorText ?? "") },
-        ],
-        "plain-text",
-        String(item!.valor),
-        "decimal-pad"
-      );
-    } else {
-      // Android: usar modal próprio
-      setValorRecebidoInput(String(item!.valor));
-      setModalConcluidoVisible(true);
-    }
+    setValorRecebidoInput(String(item!.valor));
+    setModalConcluidoVisible(true);
   }
 
   function abrirEdicao() {
     setIsEditing(true);
+  }
+
+  function montarServicosOrcamento(currentItem: Agendamento) {
+    return (currentItem.moveis && currentItem.moveis.length > 0)
+      ? currentItem.moveis.map((m) => ({
+          nome: m.servicoNome,
+          quantidade: Number(m.quantidade) || 1,
+          valorUnitario: Number(m.valor) || 0,
+          valor: (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
+        }))
+      : [{
+          nome: currentItem.tipoServico || "Serviço",
+          quantidade: 1,
+          valorUnitario: Number(currentItem.valor) || 0,
+          valor: Number(currentItem.valor) || 0,
+        }];
+  }
+
+  async function compartilharOrcamentoImagem() {
+    if (Platform.OS === "web") {
+      Alert.alert("Orçamento (IMG)", "No navegador, o compartilhamento de imagem não está disponível. Use o app Android para enviar a imagem direto no WhatsApp.");
+      return;
+    }
+
+    if (!(await Sharing.isAvailableAsync())) {
+      Alert.alert("Orçamento (IMG)", "Compartilhamento não disponível neste dispositivo.");
+      return;
+    }
+
+    if (!orcamentoCaptureRef.current) {
+      throw new Error("Referência da imagem do orçamento não disponível");
+    }
+
+    const imageUri = await captureRef(orcamentoCaptureRef, {
+      format: "png",
+      quality: 1,
+      result: "tmpfile",
+    });
+
+    await Sharing.shareAsync(imageUri, {
+      mimeType: "image/png",
+      dialogTitle: "Compartilhar orçamento (imagem)",
+      UTI: "public.png",
+    });
   }
 
   async function gerarOrcamento(tipo: "pdf" | "img") {
@@ -264,39 +300,22 @@ export default function AgendamentoDetalheScreen() {
       setGeneratingPDF(true);
       const currentItem = item!;
 
-      const servicos = (currentItem.moveis && currentItem.moveis.length > 0)
-        ? currentItem.moveis.map((m) => ({
-            nome: m.servicoNome,
-            quantidade: Number(m.quantidade) || 1,
-            valorUnitario: Number(m.valor) || 0,
-            valor: (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
-          }))
-        : [{
-            nome: currentItem.tipoServico || "Serviço",
-            quantidade: 1,
-            valorUnitario: Number(currentItem.valor) || 0,
-            valor: Number(currentItem.valor) || 0,
-          }];
-
-      const filePath = await generateOrcamentoPDF({
-        clienteNome: currentItem.clienteNome,
-        clienteTel: currentItem.clienteTelefone,
-        clienteEmail: "",
-        data: currentItem.data,
-        hora: currentItem.hora,
-        endereco: currentItem.endereco || "",
-        servicos,
-        total: Number(currentItem.valor) || 0,
-        descricao: currentItem.descricao,
-      });
-
-      await sharePDF(filePath, `orcamento_${currentItem.clienteNome}`);
-
       if (tipo === "img") {
-        Alert.alert(
-          "Orçamento (IMG)",
-          "A versão atual abre um arquivo compartilhável. Se preferir imagem, abra e salve/capture como imagem."
-        );
+        await compartilharOrcamentoImagem();
+      } else {
+        const filePath = await generateOrcamentoPDF({
+          clienteNome: currentItem.clienteNome,
+          clienteTel: currentItem.clienteTelefone,
+          clienteEmail: "",
+          data: currentItem.data,
+          hora: currentItem.hora,
+          endereco: currentItem.endereco || "",
+          servicos: montarServicosOrcamento(currentItem),
+          total: Number(currentItem.valor) || 0,
+          descricao: currentItem.descricao,
+        });
+
+        await sharePDF(filePath, `orcamento_${currentItem.clienteNome}`);
       }
     } catch (err) {
       Alert.alert("Erro", "Não foi possível gerar o orçamento.");
@@ -387,6 +406,19 @@ export default function AgendamentoDetalheScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.rowLabel, { color: colors.foreground }]}>{movel.servicoNome}</Text>
                     <Text style={[styles.rowValue, { color: colors.muted }]}>R$ {subtotal.toFixed(2)}</Text>
+                    <TextInput
+                      style={[styles.input, { borderColor: colors.border, color: colors.foreground, marginTop: 8, minHeight: 42 }]}
+                      placeholder="Observação do item (opcional)"
+                      placeholderTextColor={colors.muted}
+                      value={movel.observacao || ""}
+                      onChangeText={(text) => {
+                        const base = getMoveisEdicao();
+                        const next = [...base];
+                        next[index] = { ...next[index], observacao: text || undefined };
+                        atualizarMoveisEdicao(next);
+                      }}
+                      multiline
+                    />
                   </View>
                   <View style={styles.movelControls}>
                     <TouchableOpacity style={styles.movelQtyBtn} onPress={() => atualizarQuantidadeMovel(index, -1)}>
@@ -429,6 +461,14 @@ export default function AgendamentoDetalheScreen() {
                 onChangeText={(t) => setNovoMovelQuantidade(t.replace(/\D/g, ""))}
               />
             </View>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, color: colors.foreground, minHeight: 42 }]}
+              placeholder="Observação do item (opcional)"
+              placeholderTextColor={colors.muted}
+              value={novoMovelObservacao}
+              onChangeText={setNovoMovelObservacao}
+              multiline
+            />
             <TouchableOpacity
               style={[styles.contactBtn, { backgroundColor: colors.primary + "15" }]}
               onPress={adicionarNovoMovel}
@@ -597,11 +637,16 @@ export default function AgendamentoDetalheScreen() {
               {item.moveis.map((movel) => {
                 const subtotal = (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1);
                 return (
-                  <View key={movel.id} style={styles.row}>
-                    <Text style={[styles.rowLabel, { color: colors.foreground }]}>
-                      {movel.servicoNome} ({movel.quantidade}x)
-                    </Text>
-                    <Text style={[styles.rowValue, { color: colors.muted }]}>R$ {subtotal.toFixed(2)}</Text>
+                  <View key={movel.id} style={{ marginBottom: 8 }}>
+                    <View style={styles.row}>
+                      <Text style={[styles.rowLabel, { color: colors.foreground }]}>
+                        {movel.servicoNome} ({movel.quantidade}x)
+                      </Text>
+                      <Text style={[styles.rowValue, { color: colors.muted }]}>R$ {subtotal.toFixed(2)}</Text>
+                    </View>
+                    {!!movel.observacao?.trim() && (
+                      <Text style={[styles.rowValue, { color: colors.muted, marginTop: 2 }]}>📝 {movel.observacao}</Text>
+                    )}
                   </View>
                 );
               })}
@@ -726,6 +771,32 @@ export default function AgendamentoDetalheScreen() {
           <Text style={[styles.deleteBtnText, { color: colors.error }]}>Excluir Agendamento</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <View style={styles.captureContainer} pointerEvents="none">
+        <View ref={orcamentoCaptureRef} collapsable={false} style={styles.captureCard}>
+          <Text style={styles.captureTitle}>ORÇAMENTO</Text>
+          <Text style={styles.captureSubtitle}>MontaFácil</Text>
+
+          <Text style={styles.captureLine}>Cliente: {item.clienteNome}</Text>
+          <Text style={styles.captureLine}>Telefone: {item.clienteTelefone}</Text>
+          <Text style={styles.captureLine}>Data: {formatDate(item.data)}</Text>
+          <Text style={styles.captureLine}>Hora: {item.hora}</Text>
+          {!!item.endereco && <Text style={styles.captureLine}>Endereço: {item.endereco}</Text>}
+
+          <View style={styles.captureDivider} />
+          <Text style={styles.captureSectionTitle}>Itens</Text>
+          {montarServicosOrcamento(item).map((s, idx) => (
+            <View key={`${s.nome}-${idx}`} style={styles.captureItemRow}>
+              <Text style={styles.captureItemName}>{s.nome}</Text>
+              <Text style={styles.captureItemValue}>{`${s.quantidade}x ${formatMoney(s.valor)}`}</Text>
+            </View>
+          ))}
+
+          <View style={styles.captureDivider} />
+          <Text style={styles.captureTotal}>{`Total: ${formatMoney(item.valor)}`}</Text>
+          {!!item.descricao && <Text style={styles.captureObs}>{`Obs: ${item.descricao}`}</Text>}
+        </View>
+      </View>
 
       {/* Modal para valor recebido (Android) */}
       <Modal
@@ -1005,5 +1076,72 @@ const styles = StyleSheet.create({
   modalBtnText: {
     fontSize: 15,
     fontWeight: "600",
+  },
+  captureContainer: {
+    position: "absolute",
+    left: -9999,
+    top: -9999,
+    width: 1080,
+  },
+  captureCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  captureTitle: {
+    fontSize: 52,
+    fontWeight: "800",
+    color: "#0A7EA4",
+  },
+  captureSubtitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 20,
+  },
+  captureLine: {
+    fontSize: 24,
+    color: "#111827",
+    marginBottom: 6,
+  },
+  captureDivider: {
+    height: 1,
+    backgroundColor: "#D1D5DB",
+    marginVertical: 16,
+  },
+  captureSectionTitle: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  captureItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  captureItemName: {
+    flex: 1,
+    fontSize: 22,
+    color: "#111827",
+    fontWeight: "600",
+  },
+  captureItemValue: {
+    fontSize: 22,
+    color: "#111827",
+    fontWeight: "700",
+  },
+  captureTotal: {
+    fontSize: 30,
+    fontWeight: "800",
+    color: "#0A7EA4",
+  },
+  captureObs: {
+    fontSize: 20,
+    color: "#374151",
+    marginTop: 12,
   },
 });

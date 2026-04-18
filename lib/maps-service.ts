@@ -12,36 +12,15 @@ export async function openMaps(endereco: string): Promise<void> {
   try {
     const encodedEndereco = encodeURIComponent(endereco);
     
-    if (Platform.OS === "ios") {
-      // iOS: usar Apple Maps por padrão, com fallback para Google Maps
-      const appleUrl = `maps://maps.apple.com/?address=${encodedEndereco}`;
-      const googleUrl = `comgooglemaps://?address=${encodedEndereco}`;
-      
-      const canOpenApple = await Linking.canOpenURL(appleUrl);
-      if (canOpenApple) {
-        await Linking.openURL(appleUrl);
-      } else {
-        const canOpenGoogle = await Linking.canOpenURL(googleUrl);
-        if (canOpenGoogle) {
-          await Linking.openURL(googleUrl);
-        } else {
-          // Fallback para web
-          await Linking.openURL(`https://maps.google.com/?q=${encodedEndereco}`);
-        }
-      }
-    } else if (Platform.OS === "android") {
-      // Android: usar Google Maps
+    if (Platform.OS === "android") {
       const googleUrl = `geo:0,0?q=${encodedEndereco}`;
       const canOpen = await Linking.canOpenURL(googleUrl);
-      
       if (canOpen) {
         await Linking.openURL(googleUrl);
       } else {
-        // Fallback para web
         await Linking.openURL(`https://maps.google.com/?q=${encodedEndereco}`);
       }
     } else {
-      // Web
       await Linking.openURL(`https://maps.google.com/?q=${encodedEndereco}`);
     }
   } catch (err) {

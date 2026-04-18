@@ -23,7 +23,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 import {
   getClientes, addCliente, deleteCliente,
   getAgendamentos, addAgendamento, updateAgendamento,
-  getServicos, SERVICOS_PADRAO,
+  getServicos, updateServico, SERVICOS_PADRAO,
   getOrcamentos, addOrcamento, updateOrcamento, deleteOrcamento,
 } from "../lib/store";
 
@@ -108,6 +108,58 @@ describe("Agendamentos", () => {
     const updated = all.find((a) => a.id === ag.id);
     expect(updated?.status).toBe("concluido");
   });
+
+  it("persiste observação por item no móvel", async () => {
+    const ag = await addAgendamento({
+      clienteId: "c3",
+      clienteNome: "Rita",
+      clienteTelefone: "11911112222",
+      data: "2025-12-27",
+      hora: "14:00",
+      tipoServico: "Painel",
+      valor: 250,
+      status: "pendente",
+      moveis: [
+        {
+          id: "m-ob-1",
+          servicoNome: "Painel",
+          valor: 250,
+          quantidade: 1,
+          observacao: "Levar buchas reforçadas",
+        },
+      ],
+    });
+
+    const all = await getAgendamentos();
+    const saved = all.find((a) => a.id === ag.id);
+    expect(saved?.moveis?.[0]?.observacao).toBe("Levar buchas reforçadas");
+  });
+
+  it("migra agendamento antigo sem observação para formato atual", async () => {
+    storage["@montafacil:agendamentos"] = JSON.stringify([
+      {
+        id: "ag-old-1",
+        clienteId: "c-old",
+        clienteNome: "Cliente Antigo",
+        clienteTelefone: "11900000000",
+        data: "2025-12-20",
+        hora: "08:00",
+        tipoServico: "Rack",
+        valor: 120,
+        status: "pendente",
+        moveis: [{ id: "m-old-1", servicoNome: "Rack", valor: 120, quantidade: 1 }],
+      },
+    ]);
+
+    const all = await getAgendamentos();
+    expect(all[0].moveis?.[0]).toMatchObject({
+      id: "m-old-1",
+      servicoNome: "Rack",
+      valor: 120,
+      quantidade: 1,
+    });
+    expect(all[0].moveis?.[0]?.observacao).toBeUndefined();
+  });
 });
 
 describe("Serviços", () => {
@@ -178,6 +230,58 @@ describe("Orçamentos", () => {
     await deleteOrcamento(or.id);
     const all = await getOrcamentos();
     expect(all.find((o) => o.id === or.id)).toBeUndefined();
+  });
+
+  it("migra orçamento legado com tipos inconsistentes", async () => {
+    storage["@montafacil:orcamentos"] = JSON.stringify([
+      {
+        id: "orc-old-1",
+        clienteId: "c-old",
+        clienteNome: "Cliente Legado",
+        clienteTelefone: "11900000000",
+        itens: [
+          { servicoId: "s1", servicoNome: "Guarda-roupa 2 portas", quantidade: "2", valor: "150,5" },
+        ],
+        total: "0",
+        status: "pendente",
+        criadoEm: "2025-01-01T10:00:00.000Z",
+      },
+    ]);
+
+    const all = await getOrcamentos();
+    expect(all).toHaveLength(1);
+    expect(all[0].itens[0].quantidade).toBe(2);
+    expect(all[0].itens[0].valor).toBe(150.5);
+    expect(all[0].total).toBe(301);
+  });
+
+  it("sincroniza orçamento existente quando valor do serviço é editado", async () => {
+    const servicos = await getServicos();
+    const servico = servicos[0];
+
+    const orcamento = await addOrcamento({
+      clienteId: "c-sync-1",
+      clienteNome: "Cliente Sync",
+      clienteTelefone: "11912345678",
+      itens: [
+        {
+          servicoId: servico.id,
+          servicoNome: servico.nome,
+          quantidade: 2,
+          valor: servico.valorSugerido,
+        },
+      ],
+      total: servico.valorSugerido * 2,
+      status: "pendente",
+    });
+
+    await updateServico(servico.id, { valorSugerido: 250 });
+
+    const all = await getOrcamentos();
+    const updated = all.find((o) => o.id === orcamento.id);
+    expect(updated).toBeTruthy();
+    expect(updated?.itens[0].valor).toBe(250);
+    expect(updated?.total).toBe(500);
   });
 });
 

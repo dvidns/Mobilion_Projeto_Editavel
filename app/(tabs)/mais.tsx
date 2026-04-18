@@ -4,7 +4,6 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
-import { useUpdateChecker } from "@/hooks/use-update-checker";
 
 interface MenuItem {
   icon: string;
@@ -56,7 +55,6 @@ const MENU_ITEMS: MenuItem[] = [
 export default function MaisScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { updateStatus, isChecking, checkUpdates } = useUpdateChecker();
 
   return (
     <ScreenContainer>
@@ -85,26 +83,6 @@ export default function MaisScreen() {
           </TouchableOpacity>
         ))}
 
-        <TouchableOpacity
-          style={[styles.menuItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={checkUpdates}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.menuIcon, { backgroundColor: "#1E88E51A" }] }>
-            <MaterialIcons name="cloud-upload" size={26} color="#1E88E5" />
-          </View>
-          <View style={styles.menuInfo}>
-            <Text style={[styles.menuLabel, { color: colors.foreground }]}>Verificar Atualizações</Text>
-            <Text style={[styles.menuDesc, { color: colors.muted }]}> 
-              {isChecking
-                ? "Verificando atualizações..."
-                : updateStatus?.isAvailable
-                ? `Atualização disponível v${updateStatus.newVersion}`
-                : "Seu app está atualizado"}
-            </Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={22} color={colors.muted} />
-        </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>
   );

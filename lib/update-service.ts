@@ -1,11 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 
 const UPDATE_AVAILABLE_KEY = "@montafacil:update_available";
-
-// URL da API pública do EAS que retorna o build mais recente do projeto
-const EAS_PROJECT_ID = "232068b3-acba-4de1-b633-dd491f53b984";
-const EAS_API_URL = `https://api.expo.dev/v2/projects/${EAS_PROJECT_ID}/builds?platform=android&distribution=internal&limit=1`;
 
 export interface UpdateStatus {
   isAvailable: boolean;
@@ -18,54 +15,47 @@ export interface UpdateStatus {
   error?: string;
 }
 
+function getConfiguredApkUrl(): string | undefined {
+  const value = (Constants.expoConfig?.extra as { apkDownloadUrl?: string } | undefined)?.apkDownloadUrl;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function getCurrentVersion(): string {
-  return (Constants.expoConfig?.version ?? Constants.manifest?.version ?? "1.0.0") as string;
+  return (Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "1.0.0") as string;
 }
 
 /**
- * Verifica se há uma versão mais recente disponível consultando a API do EAS.
- * Compara o versionCode (appBuildVersion) do build mais recente com o atual.
+ * Verifica se há update OTA disponível via expo-updates.
+ * Em ambientes sem suporte (dev/Expo Go), retorna estado sem erro crítico.
  */
 export async function checkForUpdates(): Promise<UpdateStatus> {
   const currentVersion = getCurrentVersion();
-  const currentBuildVersion = String(Constants.expoConfig?.android?.versionCode ?? 0);
-  try {
-    const resp = await fetch(EAS_API_URL, {
-      headers: { Accept: "application/json" },
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
-    const builds: any[] = json?.data ?? json?.builds ?? [];
+  const currentBuildVersion = String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 0);
+  const apkUrl = getConfiguredApkUrl();
 
-    if (!builds.length) {
-      return {
-        isAvailable: false,
-        isDownloading: false,
-        isReady: false,
-        currentVersion,
-        currentBuildVersion,
-      };
+  const baseStatus: UpdateStatus = {
+    isAvailable: false,
+    isDownloading: false,
+    isReady: false,
+    currentVersion,
+    currentBuildVersion,
+    downloadUrl: apkUrl,
+  };
+
+  try {
+    if (__DEV__) {
+      return baseStatus;
     }
 
-    const latest = builds[0];
-    const latestAppBuildVersion = String(latest?.appBuildVersion ?? "");
-    const downloadUrl: string | undefined = latest?.artifacts?.applicationArchiveUrl ?? undefined;
-
-    // Considera disponível se há build mais novo e existe URL de download
-    const isAvailable =
-      !!latestAppBuildVersion &&
-      !!currentBuildVersion &&
-      Number(latestAppBuildVersion) > Number(currentBuildVersion) &&
-      !!downloadUrl;
+    const result = await Updates.checkForUpdateAsync();
+    const runtimeVersion = String(Updates.runtimeVersion ?? currentBuildVersion ?? currentVersion);
 
     const status: UpdateStatus = {
-      isAvailable,
-      isDownloading: false,
-      isReady: false,
-      currentVersion,
-      currentBuildVersion,
-      newVersion: isAvailable ? latestAppBuildVersion : undefined,
-      downloadUrl: isAvailable ? downloadUrl : undefined,
+      ...baseStatus,
+      isAvailable: result.isAvailable,
+      newVersion: result.isAvailable ? runtimeVersion : undefined,
     };
 
     await AsyncStorage.setItem(UPDATE_AVAILABLE_KEY, JSON.stringify(status));
@@ -73,11 +63,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "Erro desconhecido";
     return {
-      isAvailable: false,
-      isDownloading: false,
-      isReady: false,
-      currentVersion,
-      currentBuildVersion,
+      ...baseStatus,
       error: errorMsg,
     };
   }
@@ -88,9 +74,23 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
  */
 export async function downloadAndInstallUpdate(downloadUrl?: string): Promise<boolean> {
   try {
-    const { Linking } = await import("react-native");
-    const url = downloadUrl ?? "https://expo.dev/accounts/dvidns/projects/montador_moveis_app";
-    await Linking.openURL(url);
+    if (downloadUrl) {
+      const { Linking } = await import("react-native");
+      await Linking.openURL(downloadUrl);
+      return true;
+    }
+
+    if (__DEV__) {
+      return false;
+    }
+
+    const result = await Updates.checkForUpdateAsync();
+    if (result.isAvailable) {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+      return true;
+    }
+
     return true;
   } catch {
     return false;
