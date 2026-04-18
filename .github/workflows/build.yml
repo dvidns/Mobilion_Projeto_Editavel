@@ -49,3 +49,15 @@ jobs:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 7
+
+      - name: Publicar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "MontaFácil v${{ github.run_number }}"
+          files: android/app/build/outputs/apk/release/app-release.apk
+          body: |
+            Build automático gerado pelo GitHub Actions.
+            Commit: ${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
