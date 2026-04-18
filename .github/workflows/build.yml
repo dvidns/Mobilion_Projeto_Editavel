@@ -36,6 +36,7 @@ jobs:
 
       - name: Gerar debug.keystore
         run: |
+          mkdir -p android/app
           keytool -genkeypair \
             -v \
             -keystore android/app/debug.keystore \
