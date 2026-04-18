@@ -37,20 +37,6 @@ jobs:
       - name: Expo Prebuild (gerar pasta android)
         run: npx expo prebuild --platform android --no-install
 
-      - name: Gerar debug.keystore
-        run: |
-          mkdir -p android/app
-          keytool -genkeypair \
-            -v \
-            -keystore android/app/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US"
-
       - name: Build APK (assembleRelease)
         run: |
           cd android
