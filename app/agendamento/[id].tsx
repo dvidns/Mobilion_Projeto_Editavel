@@ -644,6 +644,17 @@ export default function AgendamentoDetalheScreen() {
 
         {/* Info card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <Text style={[styles.cardTitle, { color: colors.muted }]}>DETALHES</Text>
+            <TouchableOpacity
+              onPress={abrirEdicao}
+              activeOpacity={0.7}
+              style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.primary + "15" }}
+            >
+              <MaterialIcons name="edit" size={14} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>Editar</Text>
+            </TouchableOpacity>
+          </View>
           <Row label="Data" value={formatDate(item.data)} />
           <Row label="Horário" value={item.hora} />
           <Row label="Serviço" value={item.tipoServico} />
@@ -702,7 +713,17 @@ export default function AgendamentoDetalheScreen() {
         {/* Itens do Agendamento — card separado */}
         {!!item.moveis?.length && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.muted }]}>Itens do Agendamento:</Text>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <Text style={[styles.cardTitle, { color: colors.muted }]}>Itens do Agendamento:</Text>
+              <TouchableOpacity
+                onPress={abrirEdicao}
+                activeOpacity={0.7}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.primary + "15" }}
+              >
+                <MaterialIcons name="edit" size={14} color={colors.primary} />
+                <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>Editar</Text>
+              </TouchableOpacity>
+            </View>
             {item.moveis.map((movel) => {
               const subtotal = (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1);
               return (

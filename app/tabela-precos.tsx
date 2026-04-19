@@ -38,6 +38,9 @@ export default function TabelaPrecosScreen() {
   const [estoque, setEstoque] = useState("");
   const [estoqueMinimo, setEstoqueMinimo] = useState(String(ESTOQUE_MINIMO_PADRAO));
 
+  const precoNum = parseFloat(preco.replace(",", ".")) || 0;
+  const sugestaoForm = precoNum > 0 ? precoNum * (1 + margem / 100) : 0;
+
   // Modal de margem
   const [modalMargem, setModalMargem] = useState(false);
   const [margemInput, setMargemInput] = useState("");
@@ -136,9 +139,20 @@ export default function TabelaPrecosScreen() {
           <Text style={[styles.cardNome, { color: colors.foreground }]} numberOfLines={1}>
             {item.nome}
           </Text>
-          <Text style={[styles.cardPreco, { color: colors.primary }]}>
-            {fmtMoney(item.precoUnitario)}
-          </Text>
+          <TouchableOpacity onPress={() => abrirEditar(item)} activeOpacity={0.7} style={styles.cardEditBtn}>
+            <MaterialIcons name="edit" size={16} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.cardPrecos}>
+          <View style={styles.cardPrecoCol}>
+            <Text style={[styles.cardPrecoLabel, { color: colors.muted }]}>Custo</Text>
+            <Text style={[styles.cardPreco, { color: colors.foreground }]}>{fmtMoney(item.precoUnitario)}</Text>
+          </View>
+          <MaterialIcons name="arrow-forward" size={14} color={colors.muted} style={{ marginTop: 14 }} />
+          <View style={styles.cardPrecoCol}>
+            <Text style={[styles.cardPrecoLabel, { color: colors.muted }]}>Sugestão +{margem}%</Text>
+            <Text style={[styles.cardPreco, { color: "#34A853" }]}>{fmtMoney(item.precoUnitario * (1 + margem / 100))}</Text>
+          </View>
         </View>
         <View style={styles.cardMid}>
           <MaterialIcons name="check-circle" size={15} color="#34A853" />
@@ -278,7 +292,7 @@ export default function TabelaPrecosScreen() {
               onChangeText={setNome}
             />
 
-            <Text style={[styles.label, { color: colors.muted }]}>Preço unitário (R$) *</Text>
+            <Text style={[styles.label, { color: colors.muted }]}>Preço de custo (R$) *</Text>
             <TextInput
               style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
               placeholder="Ex: 20"
@@ -287,6 +301,14 @@ export default function TabelaPrecosScreen() {
               onChangeText={setPreco}
               keyboardType="decimal-pad"
             />
+            {sugestaoForm > 0 && (
+              <View style={[styles.sugestaoChip, { backgroundColor: "#34A85315", borderColor: "#34A85350" }]}>
+                <MaterialIcons name="trending-up" size={14} color="#34A853" />
+                <Text style={[styles.sugestaoChipText, { color: "#34A853" }]}>
+                  {" "}Sugestão de venda (+{margem}%): <Text style={{ fontWeight: "800" }}>{fmtMoney(sugestaoForm)}</Text>
+                </Text>
+              </View>
+            )}
 
             <View style={{ flexDirection: "row", gap: 10 }}>
               <View style={{ flex: 1 }}>
@@ -405,9 +427,15 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 10, gap: 4,
   },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardNome: { fontSize: 16, fontWeight: "700", flex: 1 },
-  cardPreco: { fontSize: 16, fontWeight: "700", marginLeft: 8 },
-  cardMid: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  cardNome: { fontSize: 15, fontWeight: "700", flex: 1 },
+  cardEditBtn: { padding: 6 },
+  cardPrecos: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8 },
+  cardPrecoCol: { flex: 1 },
+  cardPrecoLabel: { fontSize: 10, fontWeight: "600", marginBottom: 2, textTransform: "uppercase" },
+  cardPreco: { fontSize: 15, fontWeight: "700" },
+  cardMid: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+  sugestaoChip: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginTop: 6, marginBottom: 2 },
+  sugestaoChipText: { fontSize: 13, fontWeight: "600" },
   cardEstoque: { fontSize: 13 },
   cardBadges: { flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" },
   badge: {
