@@ -47,6 +47,16 @@ export async function gerarRelatorioExcel(dataInicio: string, dataFim: string): 
 
   // Criar workbook
   const ws = XLSX.utils.json_to_sheet(dados);
+  ws['!cols'] = [
+    { wch: 12 }, // Data
+    { wch: 8 },  // Horário
+    { wch: 25 }, // Cliente
+    { wch: 16 }, // Telefone
+    { wch: 30 }, // Serviço
+    { wch: 15 }, // Valor Orçado
+    { wch: 16 }, // Valor Recebido
+    { wch: 12 }, // Status
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Relatório');
 
@@ -61,6 +71,10 @@ export async function gerarRelatorioExcel(dataInicio: string, dataFim: string): 
     ['Faturamento Total (Recebido)', total],
     ['Ticket Médio', total / quantidade || 0],
   ]);
+  wsResumo['!cols'] = [
+    { wch: 30 }, // Label
+    { wch: 20 }, // Value
+  ];
   XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
 
   // Gerar arquivo
@@ -92,25 +106,28 @@ export async function gerarRelatorioPDF(dataInicio: string, dataFim: string): Pr
 
   // Criar HTML para PDF
   const html = `
+    <!DOCTYPE html>
     <html>
       <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-          h1 { color: #0a7ea4; margin-bottom: 10px; }
+          @page { size: A4; margin: 12mm 15mm; }
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; font-size: 14px; }
+          h1 { color: #0a7ea4; margin-bottom: 10px; font-size: 22px; }
           h2 { color: #0a7ea4; font-size: 16px; margin-top: 20px; margin-bottom: 10px; }
           .resumo { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-          .resumo-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; }
+          .resumo-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; font-size: 14px; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th { background: #0a7ea4; color: white; padding: 10px; text-align: left; font-weight: bold; }
-          td { padding: 10px; border-bottom: 1px solid #ddd; }
+          th { background: #0a7ea4; color: white; padding: 10px 8px; text-align: left; font-weight: bold; font-size: 13px; }
+          td { padding: 9px 8px; border-bottom: 1px solid #ddd; font-size: 13px; }
           tr:nth-child(even) { background: #f9f9f9; }
           .total { font-weight: bold; background: #e8f4f8; }
           .footer { margin-top: 30px; font-size: 12px; color: #999; text-align: center; }
         </style>
       </head>
       <body>
-        <h1>📊 Relatório de Faturamento</h1>
+        <h1>Relatório de Faturamento</h1>
         <p><strong>Período:</strong> ${formatDate(dataInicio)} a ${formatDate(dataFim)}</p>
         
         <div class="resumo">
@@ -175,7 +192,7 @@ export async function gerarRelatorioPDF(dataInicio: string, dataFim: string): Pr
   `;
 
   if (Platform.OS !== 'web') {
-    const { uri } = await Print.printToFileAsync({ html, width: 794 });
+    const { uri } = await Print.printToFileAsync({ html, width: 794, height: 1122 });
     return uri;
   }
 
@@ -206,21 +223,24 @@ export async function gerarRelatorioAgendamentosPDF(dataInicio: string, dataFim:
 
   // Criar HTML para PDF
   const html = `
+    <!DOCTYPE html>
     <html>
       <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-          h1 { color: #0a7ea4; margin-bottom: 10px; }
+          @page { size: A4; margin: 12mm 15mm; }
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; font-size: 14px; }
+          h1 { color: #0a7ea4; margin-bottom: 10px; font-size: 22px; }
           h2 { color: #0a7ea4; font-size: 16px; margin-top: 20px; margin-bottom: 10px; }
           .resumo { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
           .resumo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
           .resumo-item { text-align: center; padding: 10px; background: white; border-radius: 4px; }
-          .resumo-label { font-size: 12px; color: #666; margin-bottom: 5px; }
+          .resumo-label { font-size: 13px; color: #666; margin-bottom: 5px; }
           .resumo-value { font-size: 18px; font-weight: bold; color: #0a7ea4; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th { background: #0a7ea4; color: white; padding: 10px; text-align: left; font-weight: bold; }
-          td { padding: 10px; border-bottom: 1px solid #ddd; }
+          th { background: #0a7ea4; color: white; padding: 10px 8px; text-align: left; font-weight: bold; font-size: 13px; }
+          td { padding: 9px 8px; border-bottom: 1px solid #ddd; font-size: 13px; }
           tr:nth-child(even) { background: #f9f9f9; }
           .status-pendente { color: #f59e0b; font-weight: bold; }
           .status-concluido { color: #10b981; font-weight: bold; }
@@ -229,7 +249,7 @@ export async function gerarRelatorioAgendamentosPDF(dataInicio: string, dataFim:
         </style>
       </head>
       <body>
-        <h1>📅 Relatório de Agendamentos</h1>
+        <h1>Relatório de Agendamentos</h1>
         <p><strong>Período:</strong> ${formatDate(dataInicio)} a ${formatDate(dataFim)}</p>
         
         <div class="resumo">
@@ -288,7 +308,7 @@ export async function gerarRelatorioAgendamentosPDF(dataInicio: string, dataFim:
   `;
 
   if (Platform.OS !== 'web') {
-    const { uri } = await Print.printToFileAsync({ html, width: 794 });
+    const { uri } = await Print.printToFileAsync({ html, width: 794, height: 1122 });
     return uri;
   }
 
