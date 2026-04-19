@@ -40,13 +40,6 @@ const MENU_ITEMS: MenuItem[] = [
     color: "#1A73E8",
   },
   {
-    icon: "attach-money",
-    label: "Tabela de Preços",
-    desc: "Preços de referência por tipo de serviço",
-    route: "/servicos",
-    color: "#34A853",
-  },
-  {
     icon: "inventory-2",
     label: "Estoque & Materiais",
     desc: "Móveis, peças e controle de estoque",

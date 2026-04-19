@@ -11,16 +11,19 @@ import { useColors } from "@/hooks/use-colors";
 import {
   getItensEstoque, addItemEstoque, updateItemEstoque, deleteItemEstoque,
   getMargemMoveis, saveMargemMoveis, getMargemPecas, saveMargemPecas,
-  type ItemEstoque, type CategoriaItem,
+  getServicos, addServico as addServicoDB, updateServico,
+  getValorHora, saveValorHora,
+  type ItemEstoque, type CategoriaItem, type Servico,
 } from "@/lib/store";
 
 function fmtMoney(v: number) {
   return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-type Aba = "movel" | "peca";
+type Aba = "movel" | "peca" | "servicos";
 
 const ESTOQUE_MINIMO_PADRAO = 5;
+const CATEGORIAS_SVC = ["Todos", "Quarto", "Cozinha", "Sala", "Escritório", "Desmontagem", "Outros", "Customizado"];
 
 export default function TabelaPrecosScreen() {
   const colors = useColors();
@@ -50,11 +53,26 @@ export default function TabelaPrecosScreen() {
   const [margemMovInput, setMargemMovInput] = useState("");
   const [margemPecInput, setMargemPecInput] = useState("");
 
+  // Serviços states
+  const [servicos, setServicos] = useState<Servico[]>([]);
+  const [catSvc, setCatSvc] = useState("Todos");
+  const [editandoSvc, setEditandoSvc] = useState<Servico | null>(null);
+  const [svcNome, setSvcNome] = useState("");
+  const [svcValor, setSvcValor] = useState("");
+  const [svcTempo, setSvcTempo] = useState("");
+  const [svcCat, setSvcCat] = useState("Customizado");
+  const [valorHora, setValorHora] = useState("0");
+  const [modalValorHora, setModalValorHora] = useState(false);
+
   const load = useCallback(async () => {
-    const [data, mm, mp] = await Promise.all([getItensEstoque(), getMargemMoveis(), getMargemPecas()]);
+    const [data, mm, mp, svcs, vh] = await Promise.all([
+      getItensEstoque(), getMargemMoveis(), getMargemPecas(), getServicos(), getValorHora(),
+    ]);
     setItens(data);
     setMargemMoveis(mm);
     setMargemPecas(mp);
+    setServicos(svcs);
+    setValorHora(String(vh));
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -132,6 +150,43 @@ export default function TabelaPrecosScreen() {
     setModalMargem(false);
   }
 
+  // ── Serviços ─────────────────────────────────────────────────────
+  function abrirNovoServico() {
+    setEditandoSvc({ id: "new", nome: "", categoria: "Customizado", valorMin: 0, valorMax: 0, valorSugerido: 0 });
+    setSvcNome(""); setSvcValor(""); setSvcTempo(""); setSvcCat("Customizado");
+  }
+
+  function abrirEdicaoSvc(s: Servico) {
+    setEditandoSvc(s);
+    setSvcNome(s.nome); setSvcValor(String(s.valorSugerido));
+    setSvcTempo(String(s.tempoEstimadoHoras || "")); setSvcCat(s.categoria || "Customizado");
+  }
+
+  async function salvarServico() {
+    if (!svcNome.trim()) { Alert.alert("Atenção", "Informe o nome do serviço."); return; }
+    const v = parseFloat(svcValor.replace(",", "."));
+    if (isNaN(v) || v <= 0) { Alert.alert("Atenção", "Informe um valor maior que zero."); return; }
+    let tempo: number | undefined;
+    if (svcTempo.trim()) {
+      tempo = parseFloat(svcTempo.replace(",", "."));
+      if (isNaN(tempo) || tempo <= 0) { Alert.alert("Atenção", "Tempo inválido."); return; }
+    }
+    if (editandoSvc?.id === "new") {
+      await addServicoDB({ nome: svcNome.trim(), categoria: svcCat, valorMin: v, valorMax: v, valorSugerido: v, tempoEstimadoHoras: tempo });
+    } else if (editandoSvc) {
+      await updateServico(editandoSvc.id, { nome: svcNome.trim(), categoria: svcCat, valorSugerido: v, tempoEstimadoHoras: tempo });
+    }
+    setEditandoSvc(null);
+    load();
+  }
+
+  async function salvarValorHoraSvc() {
+    const vh = parseFloat(valorHora.replace(",", "."));
+    if (isNaN(vh) || vh <= 0) { Alert.alert("Atenção", "Informe um valor/hora maior que zero."); return; }
+    await saveValorHora(vh);
+    setModalValorHora(false);
+  }
+
   // ── Render item ───────────────────────────────────────────────────────────
   function renderItem({ item }: { item: ItemEstoque }) {
     const baixo = item.estoque <= item.estoqueMinimo;
@@ -192,6 +247,13 @@ export default function TabelaPrecosScreen() {
 
   const categoriaLabel = aba === "movel" ? "Móvel" : "Peça/Material";
 
+  function onSettings() {
+    if (aba === "servicos") { setModalValorHora(true); }
+    else { setMargemMovInput(String(margemMoveis)); setMargemPecInput(String(margemPecas)); setModalMargem(true); }
+  }
+
+  const filtradosSvc = catSvc === "Todos" ? servicos : servicos.filter((s) => s.categoria === catSvc);
+
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
       {/* Header */}
@@ -200,14 +262,18 @@ export default function TabelaPrecosScreen() {
           <MaterialIcons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tabela de Preços</Text>
-        <TouchableOpacity onPress={() => { setMargemInput(String(margem)); setModalMargem(true); }} activeOpacity={0.7}>
+        <TouchableOpacity onPress={onSettings} activeOpacity={0.7}>
           <MaterialIcons name="settings" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
       {/* Abas */}
       <View style={[styles.abas, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-        {(["movel", "peca"] as Aba[]).map((a) => {
+        {([
+          { key: "movel" as Aba, label: "Móveis", icon: "chair" },
+          { key: "peca" as Aba, label: "Peças & Mat.", icon: "category" },
+          { key: "servicos" as Aba, label: "Serviços", icon: "build" },
+        ]).map(({ key: a, label, icon }) => {
           const active = aba === a;
           return (
             <TouchableOpacity
@@ -216,72 +282,151 @@ export default function TabelaPrecosScreen() {
               onPress={() => setAba(a)}
               activeOpacity={0.8}
             >
-              {a === "peca" && <MaterialIcons name="category" size={16} color={active ? "#fff" : colors.muted} />}
-              <Text style={[styles.abaText, { color: active ? "#fff" : colors.muted }]}>
-                {a === "movel" ? "Móveis" : "Peças & Acessórios"}
-              </Text>
+              <MaterialIcons name={icon as any} size={14} color={active ? "#fff" : colors.muted} />
+              <Text style={[styles.abaText, { color: active ? "#fff" : colors.muted }]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Banner de margem */}
-      <TouchableOpacity
-        style={styles.margemBanner}
-        onPress={() => { setMargemMovInput(String(margemMoveis)); setMargemPecInput(String(margemPecas)); setModalMargem(true); }}
-        activeOpacity={0.85}
-      >
-        <MaterialIcons name="trending-up" size={18} color="#fff" />
-        <Text style={styles.margemBannerText}>
-          {"  "}Móveis: {margemMoveis}%{"  │  "}Peças: {margemPecas}%
-        </Text>
-        <MaterialIcons name="edit" size={15} color="rgba(255,255,255,0.8)" />
-      </TouchableOpacity>
+      {/* ── Aba Estoque (Móveis / Peças) ── */}
+      {aba !== "servicos" && (
+        <>
+          <TouchableOpacity
+            style={styles.margemBanner}
+            onPress={() => { setMargemMovInput(String(margemMoveis)); setMargemPecInput(String(margemPecas)); setModalMargem(true); }}
+            activeOpacity={0.85}
+          >
+            <MaterialIcons name="trending-up" size={18} color="#fff" />
+            <Text style={styles.margemBannerText}>
+              {"  "}Móveis: {margemMoveis}%{"  │  "}Peças: {margemPecas}%
+            </Text>
+            <MaterialIcons name="edit" size={15} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
 
-      {/* Botão adicionar */}
-      <TouchableOpacity
-        style={[styles.btnAdd, { backgroundColor: colors.primary }]}
-        onPress={abrirNovo}
-        activeOpacity={0.85}
-      >
-        <MaterialIcons name="add" size={20} color="#fff" />
-        <Text style={styles.btnAddText}>  Adicionar {categoriaLabel}</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btnAdd, { backgroundColor: colors.primary }]}
+            onPress={abrirNovo}
+            activeOpacity={0.85}
+          >
+            <MaterialIcons name="add" size={20} color="#fff" />
+            <Text style={styles.btnAddText}>  Adicionar {categoriaLabel}</Text>
+          </TouchableOpacity>
 
-      {/* Lista */}
-      <FlatList
-        data={filtrados}
-        keyExtractor={(i) => i.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 100 }}
-        ListEmptyComponent={
-          <View style={[styles.empty, { borderColor: colors.border }]}>
-            <MaterialIcons name="inventory-2" size={42} color={colors.muted} />
-            <Text style={{ color: colors.muted, textAlign: "center", marginTop: 8 }}>
-              {"Nenhum item cadastrado\nToque em \"Adicionar\" para começar"}
+          <FlatList
+            data={filtrados}
+            keyExtractor={(i) => i.id}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 100 }}
+            ListEmptyComponent={
+              <View style={[styles.empty, { borderColor: colors.border }]}>
+                <MaterialIcons name="inventory-2" size={42} color={colors.muted} />
+                <Text style={{ color: colors.muted, textAlign: "center", marginTop: 8 }}>
+                  {"Nenhum item cadastrado\nToque em \"Adicionar\" para começar"}
+                </Text>
+              </View>
+            }
+          />
+
+          {filtrados.length > 0 && (
+            <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+              <Text style={[styles.footerText, { color: colors.muted }]}>
+                Total em Estoque:{" "}
+                <Text style={{ color: colors.primary, fontWeight: "700" }}>{fmtMoney(totalCusto)}</Text>
+              </Text>
+              <Text style={[styles.footerText, { color: colors.muted }]}>
+                Sugestão de Venda:{" "}
+                <Text style={{ color: "#34A853", fontWeight: "700" }}>{fmtMoney(sugestaoVenda)}</Text>
+              </Text>
+            </View>
+          )}
+        </>
+      )}
+
+      {/* ── Aba Serviços ── */}
+      {aba === "servicos" && (
+        <>
+          {/* Card valor/hora */}
+          <TouchableOpacity
+            style={[styles.valorHoraCard, { backgroundColor: colors.primary + "12", borderColor: colors.primary }]}
+            onPress={() => setModalValorHora(true)}
+            activeOpacity={0.85}
+          >
+            <MaterialIcons name="schedule" size={20} color={colors.primary} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={{ fontSize: 12, color: colors.muted }}>Seu valor/hora</Text>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: colors.primary }}>{fmtMoney(parseFloat(valorHora) || 0)}</Text>
+            </View>
+            <MaterialIcons name="edit" size={18} color={colors.primary} />
+          </TouchableOpacity>
+
+          {/* Info */}
+          <View style={[styles.infoBanner, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "30" }]}>
+            <MaterialIcons name="info-outline" size={15} color={colors.primary} />
+            <Text style={{ flex: 1, fontSize: 12, color: colors.primary, marginLeft: 6, lineHeight: 17 }}>
+              Preços de referência do mercado. Toque para editar. Configure valor/hora para cálculo automático.
             </Text>
           </View>
-        }
-      />
 
-      {/* Rodapé de totais */}
-      {filtrados.length > 0 && (
-        <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-          <Text style={[styles.footerText, { color: colors.muted }]}>
-            Total em Estoque:{" "}
-            <Text style={{ color: colors.primary, fontWeight: "700" }}>{fmtMoney(totalCusto)}</Text>
-          </Text>
-          <Text style={[styles.footerText, { color: colors.muted }]}>
-            Sugestão de Venda:{" "}
-            <Text style={{ color: "#34A853", fontWeight: "700" }}>{fmtMoney(sugestaoVenda)}</Text>
-          </Text>
-        </View>
+          {/* Filtro categorias */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}
+          >
+            {CATEGORIAS_SVC.map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.catBtn, catSvc === cat
+                  ? { backgroundColor: colors.primary }
+                  : { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={() => setCatSvc(cat)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.catText, { color: catSvc === cat ? "#fff" : colors.muted }]}>{cat}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Lista de serviços */}
+          <FlatList
+            data={filtradosSvc}
+            keyExtractor={(s) => s.id}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 100, gap: 8 }}
+            renderItem={({ item: s }) => (
+              <TouchableOpacity
+                style={[styles.svcRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onPress={() => abrirEdicaoSvc(s)}
+                activeOpacity={0.8}
+              >
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>{s.nome}</Text>
+                  <Text style={{ fontSize: 12, color: colors.muted }}>{s.categoria}</Text>
+                  <Text style={{ fontSize: 11, color: colors.muted }}>Mercado: {fmtMoney(s.valorMin)} – {fmtMoney(s.valorMax)}</Text>
+                  {!!s.tempoEstimadoHoras && (
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>
+                      ⏱ {s.tempoEstimadoHoras}h = {fmtMoney((parseFloat(valorHora) || 0) * s.tempoEstimadoHoras)}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ alignItems: "flex-end", gap: 4 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#34A853" }}>{fmtMoney(s.valorSugerido)}</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}>editar</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={[styles.empty, { borderColor: colors.border }]}>
+                <MaterialIcons name="build" size={42} color={colors.muted} />
+                <Text style={{ color: colors.muted, textAlign: "center", marginTop: 8 }}>Nenhum serviço encontrado</Text>
+              </View>
+            }
+          />
+        </>
       )}
 
       {/* FAB */}
       <TouchableOpacity
         style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={abrirNovo}
+        onPress={aba === "servicos" ? abrirNovoServico : abrirNovo}
         activeOpacity={0.85}
       >
         <MaterialIcons name="add" size={28} color="#fff" />
@@ -426,6 +571,115 @@ export default function TabelaPrecosScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Modal Serviço (novo/editar) ───────────────────────────── */}
+      <Modal visible={!!editandoSvc} animationType="slide" transparent>
+        <View style={styles.overlay}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }} keyboardShouldPersistTaps="handled">
+            <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.sheetTitle, { color: colors.foreground }]}>
+                {editandoSvc?.id === "new" ? "Novo Serviço" : "Editar Serviço"}
+              </Text>
+
+              <Text style={[styles.label, { color: colors.muted }]}>Nome *</Text>
+              <TextInput
+                style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="Ex: Montagem de Guarda-roupa"
+                placeholderTextColor={colors.muted}
+                value={svcNome}
+                onChangeText={setSvcNome}
+                autoFocus={editandoSvc?.id === "new"}
+              />
+
+              <Text style={[styles.label, { color: colors.muted }]}>Categoria</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, paddingVertical: 4 }}
+              >
+                {["Quarto", "Cozinha", "Sala", "Escritório", "Desmontagem", "Outros", "Customizado"].map((cat) => (
+                  <TouchableOpacity key={cat}
+                    style={[styles.catBtn, svcCat === cat
+                      ? { backgroundColor: colors.primary }
+                      : { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 }]}
+                    onPress={() => setSvcCat(cat)} activeOpacity={0.8}
+                  >
+                    <Text style={[styles.catText, { color: svcCat === cat ? "#fff" : colors.muted }]}>{cat}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={[styles.label, { color: colors.muted }]}>Preço Sugerido (R$) *</Text>
+              <TextInput
+                style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="Ex: 150"
+                placeholderTextColor={colors.muted}
+                value={svcValor}
+                onChangeText={setSvcValor}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={[styles.label, { color: colors.muted }]}>Tempo estimado (horas)</Text>
+              <TextInput
+                style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="Ex: 2.5 (opcional)"
+                placeholderTextColor={colors.muted}
+                value={svcTempo}
+                onChangeText={setSvcTempo}
+                keyboardType="decimal-pad"
+              />
+              {!!svcTempo.trim() && (
+                <View style={[styles.sugestaoChip, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "40" }]}>
+                  <MaterialIcons name="schedule" size={14} color={colors.primary} />
+                  <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "600" }}>
+                    {" "}{svcTempo}h × {fmtMoney(parseFloat(valorHora) || 0)}/h = {fmtMoney((parseFloat(svcTempo.replace(",",".")) || 0) * (parseFloat(valorHora) || 0))}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.sheetBtns}>
+                <TouchableOpacity style={[styles.sheetBtnCancel, { borderColor: colors.border }]}
+                  onPress={() => setEditandoSvc(null)} activeOpacity={0.8}>
+                  <Text style={{ color: colors.foreground, fontWeight: "600" }}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.sheetBtnSave, { backgroundColor: colors.primary }]}
+                  onPress={salvarServico} activeOpacity={0.8}>
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>Salvar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Modal Valor/Hora ───────────────────────────────────── */}
+      <Modal visible={modalValorHora} animationType="fade" transparent>
+        <View style={styles.overlay}>
+          <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Valor/Hora</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8 }}>
+              Usado para calcular o preço automático com base no tempo estimado.
+            </Text>
+            <Text style={[styles.label, { color: colors.muted }]}>Valor por hora (R$)</Text>
+            <TextInput
+              style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              value={valorHora}
+              onChangeText={setValorHora}
+              keyboardType="decimal-pad"
+              autoFocus
+              placeholderTextColor={colors.muted}
+            />
+            <View style={styles.sheetBtns}>
+              <TouchableOpacity style={[styles.sheetBtnCancel, { borderColor: colors.border }]}
+                onPress={() => setModalValorHora(false)} activeOpacity={0.8}>
+                <Text style={{ color: colors.foreground, fontWeight: "600" }}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.sheetBtnSave, { backgroundColor: colors.primary }]}
+                onPress={salvarValorHoraSvc} activeOpacity={0.8}>
+                <Text style={{ color: "#fff", fontWeight: "700" }}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -442,7 +696,22 @@ const styles = StyleSheet.create({
     gap: 8, borderBottomWidth: 1,
   },
   aba: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8 },
-  abaText: { fontSize: 14, fontWeight: "600" },
+  abaText: { fontSize: 13, fontWeight: "600" },
+
+  valorHoraCard: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    margin: 12, padding: 12, borderRadius: 12, borderWidth: 1,
+  },
+  infoBanner: {
+    flexDirection: "row", alignItems: "flex-start",
+    margin: 12, marginBottom: 4, padding: 10, borderRadius: 8, borderWidth: 1,
+  },
+  catBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+  catText: { fontSize: 13, fontWeight: "600" },
+  svcRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    padding: 12, borderRadius: 12, borderWidth: 1,
+  },
 
   margemBanner: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
