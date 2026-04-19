@@ -15,7 +15,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
   addAgendamento, getClientes, addCliente, updateCliente, atualizarEnderecoCliente, getServicos, addServico,
-  getItensEstoque, getMargemPecas,
+  getItensEstoque, getMargemPecas, addItemEstoque,
   type Cliente, type Servico, type ItemEstoque,
 } from "@/lib/store";
 
@@ -171,6 +171,13 @@ export default function NovoAgendamentoScreen() {
   const [itensEstoque, setItensEstoque] = useState<ItemEstoque[]>([]);
   const [margemPecas, setMargemPecas] = useState(30);
   const [pecasSelecionadas, setPecasSelecionadas] = useState<{ id: string; nome: string; preco: number; qtd: number }[]>([]);
+
+  // Modal cadastro de nova peça
+  const [modalNovaPeca, setModalNovaPeca] = useState(false);
+  const [novaPecaNome, setNovaPecaNome] = useState("");
+  const [novaPecaPreco, setNovaPecaPreco] = useState("");
+  const [novaPecaEstoque, setNovaPecaEstoque] = useState("1");
+  const [salvandoPeca, setSalvandoPeca] = useState(false);
 
   useEffect(() => {
     getClientes().then(setClientes);
@@ -618,16 +625,48 @@ export default function NovoAgendamentoScreen() {
     );
   }
 
-  // ── Passo 3: Detalhes ────────────────────────────────────────────────────
   // ── Passo 3: Peças & Materiais ────────────────────────────────────────
+  async function salvarNovaPeca() {
+    const nomeT = novaPecaNome.trim();
+    if (!nomeT) { Alert.alert("Atenção", "Informe o nome da peça."); return; }
+    const precoN = parseFloat(novaPecaPreco.replace(",", "."));
+    if (isNaN(precoN) || precoN < 0) { Alert.alert("Atenção", "Informe um preço válido."); return; }
+    const estN = Math.max(0, parseInt(novaPecaEstoque, 10) || 0);
+    setSalvandoPeca(true);
+    try {
+      const novo = await addItemEstoque({ nome: nomeT, categoria: "peca", precoUnitario: precoN, estoque: estN, estoqueMinimo: 1 });
+      const novosItens = await getItensEstoque();
+      setItensEstoque(novosItens);
+      // Já adiciona direto na seleção
+      setPecasSelecionadas((prev) => [...prev, { id: novo.id, nome: novo.nome, preco: novo.precoUnitario, qtd: 1 }]);
+      setModalNovaPeca(false);
+      setNovaPecaNome(""); setNovaPecaPreco(""); setNovaPecaEstoque("1");
+    } catch {
+      Alert.alert("Erro", "Não foi possível cadastrar a peça.");
+    } finally {
+      setSalvandoPeca(false);
+    }
+  }
+
   function renderPasso3() {
     const pecas = itensEstoque.filter((i) => i.categoria === "peca");
     return (
       <View style={styles.stepContent}>
         <Text style={[styles.stepTitle, { color: colors.foreground }]}>Peças & Materiais</Text>
-        <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 12 }}>
+        <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 8 }}>
           Selecione as peças que serão utilizadas (opcional). Preço já inclui {margemPecas}% de margem.
         </Text>
+        {/* Botão cadastrar nova peça */}
+        <TouchableOpacity
+          onPress={() => setModalNovaPeca(true)}
+          activeOpacity={0.8}
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start",
+            backgroundColor: colors.primary + "15", borderColor: colors.primary + "50", borderWidth: 1,
+            paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, marginBottom: 12 }}
+        >
+          <MaterialIcons name="add" size={16} color={colors.primary} />
+          <Text style={{ fontSize: 13, color: colors.primary, fontWeight: "700" }}>Cadastrar nova peça</Text>
+        </TouchableOpacity>
         {pecas.length === 0 ? (
           <View style={[styles.emptyClienteCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <MaterialIcons name="inventory-2" size={40} color={colors.muted} />
@@ -953,6 +992,74 @@ export default function NovoAgendamentoScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* ══ MODAL: Cadastrar Nova Peça ══════════════════════════════════════ */}
+      <Modal visible={modalNovaPeca} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Nova Peça / Material</Text>
+              <TouchableOpacity onPress={() => setModalNovaPeca(false)}>
+                <MaterialIcons name="close" size={24} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.label, { color: colors.muted }]}>Nome *</Text>
+            <TextInput
+              style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              placeholder="Ex: Dobradiça, Parafuso, Trilho..."
+              placeholderTextColor={colors.muted}
+              value={novaPecaNome}
+              onChangeText={setNovaPecaNome}
+              autoFocus
+            />
+
+            <Text style={[styles.label, { color: colors.muted }]}>Preço de custo (R$) *</Text>
+            <TextInput
+              style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              placeholder="Ex: 5,50"
+              placeholderTextColor={colors.muted}
+              value={novaPecaPreco}
+              onChangeText={setNovaPecaPreco}
+              keyboardType="decimal-pad"
+            />
+            {!!novaPecaPreco && !isNaN(parseFloat(novaPecaPreco.replace(",", "."))) && (
+              <Text style={{ color: "#34A853", fontSize: 12, marginBottom: 8, marginTop: -6 }}>
+                Venda sugerida (+{margemPecas}%): R$ {(parseFloat(novaPecaPreco.replace(",", ".")) * (1 + margemPecas / 100)).toFixed(2)}
+              </Text>
+            )}
+
+            <Text style={[styles.label, { color: colors.muted }]}>Quantidade em estoque</Text>
+            <TextInput
+              style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              placeholder="1"
+              placeholderTextColor={colors.muted}
+              value={novaPecaEstoque}
+              onChangeText={setNovaPecaEstoque}
+              keyboardType="number-pad"
+            />
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+              <TouchableOpacity
+                style={[styles.wizardBtnVoltar, { flex: 1, borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => setModalNovaPeca(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.wizardBtnVoltarText, { color: colors.foreground }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.wizardBtnProximo, { flex: 1, backgroundColor: salvandoPeca ? colors.border : colors.primary }]}
+                onPress={salvarNovaPeca}
+                disabled={salvandoPeca}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="check" size={16} color="#fff" />
+                <Text style={styles.wizardBtnProximoText}>{salvandoPeca ? "Salvando..." : "Salvar"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ══ MODAL: Contatos do celular ══════════════════════════════════════ */}
       <Modal visible={modalContatos} animationType="slide">
