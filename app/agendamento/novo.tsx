@@ -163,6 +163,8 @@ export default function NovoAgendamentoScreen() {
   const [carregandoContatos, setCarregandoContatos] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState(1);
+  const STEPS = ["Cliente", "Serviço", "Detalhes", "Confirmação"];
 
   useEffect(() => {
     getClientes().then(setClientes);
@@ -396,49 +398,88 @@ export default function NovoAgendamentoScreen() {
     setObservacaoMovel("");
   }, [servicoSelecionado, valor, quantidadeMovel, observacaoMovel]);
 
-  return (
-    <ScreenContainer edges={["top", "left", "right", "bottom"]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.primary }]}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-          <MaterialIcons name="arrow-back" size={26} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Novo Agendamento</Text>
-        <View style={{ width: 26 }} />
+  // ── Navegação entre passos ──────────────────────────────────────────────
+  function avancar() {
+    if (step === 1) {
+      if (!clienteSelecionado) { Alert.alert("Atenção", "Selecione um cliente para continuar."); return; }
+    }
+    if (step === 2) {
+      if (!servicoSelecionado) { Alert.alert("Atenção", "Selecione o tipo de serviço."); return; }
+      if (!data) { Alert.alert("Atenção", "Informe a data."); return; }
+    }
+    if (step === 3) {
+      const temItemAtual = !!servicoSelecionado && !!valor;
+      if (moveis.length === 0 && !temItemAtual) { Alert.alert("Atenção", "Adicione pelo menos um móvel/serviço."); return; }
+      if (temRetorno && !dataRetorno) { Alert.alert("Atenção", "Informe a data do retorno."); return; }
+    }
+    setStep(s => s + 1);
+  }
+
+  function voltar() {
+    if (step === 1) { router.back(); return; }
+    setStep(s => s - 1);
+  }
+
+  function calcTotal() {
+    let lista = [...moveis];
+    if (servicoSelecionado && valor) {
+      const qtd = Math.max(1, parseInt(quantidadeMovel, 10) || 1);
+      lista = [...lista, { id: "_cur", servicoId: servicoSelecionado.id, servicoNome: servicoSelecionado.nome, valor, quantidade: qtd }];
+    }
+    return lista.reduce((sum, m) => sum + parseFloat((m.valor || "0").replace(",", ".")) * m.quantidade, 0);
+  }
+
+  // ── Stepper ─────────────────────────────────────────────────────────────
+  function renderStepper() {
+    return (
+      <View style={styles.stepper}>
+        {STEPS.map((label, i) => {
+          const num = i + 1;
+          const done = num < step;
+          const active = num === step;
+          return (
+            <React.Fragment key={num}>
+              {i > 0 && (
+                <View style={[styles.stepLine, { backgroundColor: done || active ? colors.primary : colors.border }]} />
+              )}
+              <View style={styles.stepCol}>
+                <View style={[
+                  styles.stepCircle,
+                  { backgroundColor: done || active ? colors.primary : colors.surface, borderColor: done || active ? colors.primary : colors.border },
+                ]}>
+                  {done
+                    ? <MaterialIcons name="check" size={12} color="#fff" />
+                    : <Text style={[styles.stepNum, { color: active ? "#fff" : colors.muted }]}>{num}</Text>
+                  }
+                </View>
+                <Text style={[styles.stepLabel, { color: active ? colors.primary : done ? colors.primary : colors.muted }]} numberOfLines={1}>
+                  {label}
+                </Text>
+              </View>
+            </React.Fragment>
+          );
+        })}
       </View>
+    );
+  }
 
-      <ScrollView
-        contentContainerStyle={styles.form}
-        keyboardShouldPersistTaps="handled"
-        onScrollBeginDrag={() => setMostrarSugestoes(false)}
-      >
-
-        {/* ── CLIENTE ─────────────────────────────────────────────────────── */}
-        <Text style={[styles.label, { color: colors.muted }]}>Cliente *</Text>
-
-        {/* Botões de origem do cliente */}
+  // ── Passo 1: Cliente ─────────────────────────────────────────────────────
+  function renderPasso1() {
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 1: Cliente</Text>
+        <Text style={[styles.label, { color: colors.muted }]}>Selecione o cliente *</Text>
         <View style={styles.clienteOpcoes}>
-          {/* Opção 1: buscar nos já cadastrados */}
           <TouchableOpacity
-            style={[
-              styles.clienteOpcaoBtn,
-              { borderColor: colors.border, backgroundColor: colors.surface },
-            ]}
+            style={[styles.clienteOpcaoBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
             onPress={() => setModalCliente(true)}
             activeOpacity={0.8}
           >
             <MaterialIcons name="people" size={20} color={colors.primary} />
-            <Text style={[styles.clienteOpcaoText, { color: colors.foreground }]}>
-              Clientes{"\n"}cadastrados
-            </Text>
+            <Text style={[styles.clienteOpcaoText, { color: colors.foreground }]}>{"Clientes\ncadastrados"}</Text>
           </TouchableOpacity>
-
-          {/* Opção 2: buscar nos contatos do celular */}
           <TouchableOpacity
-            style={[
-              styles.clienteOpcaoBtn,
-              { borderColor: colors.primary, backgroundColor: colors.primary + "10" },
-            ]}
+            style={[styles.clienteOpcaoBtn, { borderColor: colors.primary, backgroundColor: colors.primary + "10" }]}
             onPress={abrirPickerContato}
             activeOpacity={0.8}
             disabled={carregandoContatos}
@@ -449,8 +490,6 @@ export default function NovoAgendamentoScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
-        {/* Cliente selecionado */}
         {clienteSelecionado ? (
           <View style={[styles.clienteSelecionado, { backgroundColor: colors.primary + "12", borderColor: colors.primary + "40" }]}>
             <View style={[styles.clienteAvatar, { backgroundColor: colors.primary + "25" }]}>
@@ -459,81 +498,59 @@ export default function NovoAgendamentoScreen() {
               </Text>
             </View>
             <View style={styles.clienteInfo}>
-              <Text style={[styles.clienteNome, { color: colors.foreground }]}>
-                {clienteSelecionado.nome}
-              </Text>
-              <Text style={[styles.clienteTel, { color: colors.muted }]}>
-                {clienteSelecionado.telefone}
-              </Text>
+              <Text style={[styles.clienteNome, { color: colors.foreground }]}>{clienteSelecionado.nome}</Text>
+              <Text style={[styles.clienteTel, { color: colors.muted }]}>{clienteSelecionado.telefone}</Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setClienteSelecionado(null)}
-              activeOpacity={0.7}
-              style={styles.clienteClear}
-            >
+            <TouchableOpacity onPress={() => setClienteSelecionado(null)} activeOpacity={0.7} style={styles.clienteClear}>
               <MaterialIcons name="close" size={18} color={colors.muted} />
             </TouchableOpacity>
           </View>
         ) : (
-          <Text style={[styles.clienteHint, { color: colors.muted }]}>
-            Nenhum cliente selecionado
-          </Text>
+          <View style={[styles.emptyClienteCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <MaterialIcons name="person-outline" size={40} color={colors.muted} />
+            <Text style={{ color: colors.muted, fontSize: 14, textAlign: "center", lineHeight: 20 }}>
+              {"Nenhum cliente selecionado\nUse os botões acima para selecionar"}
+            </Text>
+          </View>
         )}
+      </View>
+    );
+  }
 
-        {/* ── SERVIÇO ─────────────────────────────────────────────────────── */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-          <Text style={[styles.label, { color: colors.muted }]}>Tipo de Serviço *</Text>
+  // ── Passo 2: Serviço ─────────────────────────────────────────────────────
+  function renderPasso2() {
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 2: Serviço</Text>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={[styles.label, { color: colors.muted }]}>Tipo de Serviço</Text>
           <TouchableOpacity onPress={() => setModalServico(true)} activeOpacity={0.8}>
-            <Text style={[{ color: colors.primary, fontSize: 12, fontWeight: "600" }]}>Ver todos</Text>
+            <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "600" }}>Ver todos</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Autocomplete input */}
-        <View style={{ position: "relative", zIndex: 10, marginBottom: 0 }}>
+        <View style={{ position: "relative", zIndex: 10 }}>
           <View style={[styles.picker, { borderColor: mostrarSugestoes ? colors.primary : colors.border, backgroundColor: colors.surface, marginBottom: 0 }]}>
             <MaterialIcons name="search" size={18} color={colors.muted} style={{ marginRight: 6 }} />
             <TextInput
               style={[styles.pickerText, { color: colors.foreground, flex: 1, paddingVertical: 0 }]}
               value={buscaServico}
-              onChangeText={(text) => {
-                setBuscaServico(text);
-                setMostrarSugestoes(true);
-                // Se o usuário apagou tudo, limpar seleção
-                if (!text.trim()) {
-                  setServicoSelecionado(null);
-                }
-              }}
+              onChangeText={(text) => { setBuscaServico(text); setMostrarSugestoes(true); if (!text.trim()) setServicoSelecionado(null); }}
               onFocus={() => setMostrarSugestoes(true)}
-              placeholder="Digite para buscar móvel/serviço..."
+              placeholder="Selecione o serviço"
               placeholderTextColor={colors.muted}
               returnKeyType="done"
-              accessibilityLabel="Buscar serviço"
             />
             {(buscaServico.length > 0 || servicoSelecionado) && (
-              <TouchableOpacity
-                onPress={() => {
-                  setBuscaServico("");
-                  setServicoSelecionado(null);
-                  setMostrarSugestoes(false);
-                }}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={() => { setBuscaServico(""); setServicoSelecionado(null); setMostrarSugestoes(false); }} activeOpacity={0.7}>
                 <MaterialIcons name="close" size={18} color={colors.muted} />
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Dropdown de sugestões */}
           {mostrarSugestoes && sugestoesServico.length > 0 && (
             <View style={[styles.sugestoesBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {/* Opção: Novo serviço customizado */}
               <TouchableOpacity
                 style={[styles.sugestaoItem, { borderBottomColor: colors.border, backgroundColor: colors.primary + "10" }]}
-                onPress={() => {
-                  setMostrarSugestoes(false);
-                  setMostraInputCustomizado(true);
-                  setModalServico(true);
-                }}
+                onPress={() => { setMostrarSugestoes(false); setMostraInputCustomizado(true); setModalServico(true); }}
                 activeOpacity={0.7}
               >
                 <MaterialIcons name="add-circle-outline" size={16} color={colors.primary} />
@@ -543,110 +560,63 @@ export default function NovoAgendamentoScreen() {
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.sugestaoItem, { borderBottomColor: colors.border }]}
-                  onPress={() => {
-                    setServicoSelecionado(item);
-                    setBuscaServico(item.nome);
-                    setValor(String(item.valorSugerido));
-                    setMostrarSugestoes(false);
-                  }}
+                  onPress={() => { setServicoSelecionado(item); setBuscaServico(item.nome); setValor(String(item.valorSugerido)); setMostrarSugestoes(false); }}
                   activeOpacity={0.7}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.sugestaoNome, { color: colors.foreground }]}>{item.nome}</Text>
-                    <Text style={[styles.sugestaoSub, { color: colors.muted }]}>
-                      {item.categoria} · R$ {item.valorMin}–{item.valorMax}
-                    </Text>
+                    <Text style={[styles.sugestaoSub, { color: colors.muted }]}>{item.categoria} · R$ {item.valorMin}–{item.valorMax}</Text>
                   </View>
-                  <Text
-                    style={[{ color: colors.success, fontWeight: "700", fontSize: 13 }]}
-                    accessibilityLabel={`Preço sugerido: R$ ${item.valorSugerido}`}
-                  >
-                    R$ {item.valorSugerido}
-                  </Text>
+                  <Text style={{ color: colors.success, fontWeight: "700", fontSize: 13 }}>R$ {item.valorSugerido}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           )}
         </View>
-
-        {/* Serviço selecionado via autocomplete */}
         {servicoSelecionado && !mostrarSugestoes && (
-          <View style={[styles.servicoSelecionadoCard, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "40" }]}>
+          <View style={[styles.servicoSelecionadoCard, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "40", marginTop: 8 }]}>
             <MaterialIcons name="check-circle" size={16} color={colors.primary} />
-            <Text style={[{ flex: 1, color: colors.primary, fontSize: 13, fontWeight: "600" }]}>
-              {servicoSelecionado.nome}
-            </Text>
-            <Text style={[{ color: colors.muted, fontSize: 12 }]}>
-              Ref: R$ {servicoSelecionado.valorMin}–{servicoSelecionado.valorMax}
-            </Text>
+            <Text style={{ flex: 1, color: colors.primary, fontSize: 13, fontWeight: "600" }}>{servicoSelecionado.nome}</Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>Ref: R$ {servicoSelecionado.valorMin}–{servicoSelecionado.valorMax}</Text>
           </View>
         )}
-
-        {/* ── DATA ────────────────────────────────────────────────────────── */}
-        <DatePicker
-          label="Data *"
-          value={data}
-          onChange={setData}
-        />
-
-        {/* ── HORA ────────────────────────────────────────────────────────── */}
+        <DatePicker label="Data *" value={data} onChange={setData} />
         <Text style={[styles.label, { color: colors.muted }]}>Horário *</Text>
         <TouchableOpacity
           style={[styles.picker, { borderColor: colors.border, backgroundColor: colors.surface }]}
-          onPress={() => {
-            setTimePickerMode("hora");
-            setShowTimePicker(true);
-          }}
+          onPress={() => { setTimePickerMode("hora"); setShowTimePicker(true); }}
           activeOpacity={0.8}
         >
+          <MaterialIcons name="access-time" size={20} color={colors.primary} />
           <Text style={[styles.pickerText, { color: colors.foreground }]}>{hora}</Text>
-          <MaterialIcons name="access-time" size={22} color={colors.muted} />
+          <MaterialIcons name="expand-more" size={22} color={colors.muted} />
         </TouchableOpacity>
-        <Text style={[styles.hint, { color: colors.muted, fontSize: 11 }]}>
-          Toque para selecionar o horário
-        </Text>
+      </View>
+    );
+  }
 
-        {/* ── ENDEREÇO ────────────────────────────────────────────────────── */}
-        <Input
-          label="Endereço / Bairro"
-          value={endereco}
-          onChangeText={setEndereco}
-          placeholder="Rua, número, bairro..."
-        />
-
-        {/* ── VALOR ───────────────────────────────────────────────────────── */}
-        <Input
-          label="Valor (R$) *"
-          value={valor}
-          onChangeText={setValor}
-          placeholder="0,00"
-          keyboardType="decimal-pad"
-        />
-
-        <Input
-          label="Observação do Item"
-          value={observacaoMovel}
-          onChangeText={setObservacaoMovel}
-          placeholder="Detalhe específico deste móvel/serviço"
-          multiline
-          numberOfLines={2}
-        />
-
+  // ── Passo 3: Detalhes ────────────────────────────────────────────────────
+  function renderPasso3() {
+    return (
+      <View style={[styles.stepContent, { zIndex: 1 }]}>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 3: Detalhes</Text>
+        <Input label="Endereço / Bairro" value={endereco} onChangeText={setEndereco} placeholder="Rua, número, bairro..." />
+        <Input label="Valor (R$) *" value={valor} onChangeText={setValor} placeholder="0,00" keyboardType="decimal-pad" />
+        <Input label="Observação do Item" value={observacaoMovel} onChangeText={setObservacaoMovel} placeholder="Detalhe específico deste móvel/serviço" multiline numberOfLines={2} />
         <View style={styles.movelConfigRow}>
           <View style={styles.movelQtdBox}>
             <Text style={[styles.label, { color: colors.muted }]}>Quantidade</Text>
             <TextInput
               value={quantidadeMovel}
-              onChangeText={(text) => setQuantidadeMovel(text.replace(/\D/g, ""))}
+              onChangeText={(t) => setQuantidadeMovel(t.replace(/\D/g, ""))}
               keyboardType="number-pad"
               style={[styles.input, styles.movelQtdInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
               placeholder="1"
               placeholderTextColor={colors.muted}
             />
           </View>
-
           <TouchableOpacity
-            style={[styles.addMovelActionBtn, { backgroundColor: colors.primary }]}
+            style={[styles.addMovelActionBtn, { backgroundColor: servicoSelecionado && valor ? colors.primary : colors.border }]}
             onPress={handleAddMovel}
             activeOpacity={0.8}
             disabled={!servicoSelecionado || !valor}
@@ -655,171 +625,198 @@ export default function NovoAgendamentoScreen() {
             <Text style={styles.addMovelActionText}>Adicionar à lista</Text>
           </TouchableOpacity>
         </View>
-
-        {/* ── LISTA DE MÓVEIS ADICIONAIS ──────────────────────────────────── */}
         {moveis.length > 0 && (
-          <View style={{ marginTop: 16, marginBottom: 12 }}>
-            <Text style={[styles.label, { color: colors.muted }]}>Móveis/Serviços Adicionais</Text>
-            {moveis.map((movel, idx) => (
-              <MovelItem
-                key={movel.id}
-                movel={movel}
-                index={idx}
-                colors={colors}
-                onUpdateQuantidade={handleUpdateQuantidade}
-                onRemove={handleRemoveMovel}
-              />
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.muted }]}>Itens adicionados</Text>
+            {moveis.map((m, idx) => (
+              <MovelItem key={m.id} movel={m} index={idx} colors={colors} onUpdateQuantidade={handleUpdateQuantidade} onRemove={handleRemoveMovel} />
             ))}
           </View>
         )}
-
-        {/* ── BOTÃO ADICIONAR MÓVEL ───────────────────────────────────────────────────── */}
-        {servicoSelecionado && valor && moveis.length > 0 && (
-          <TouchableOpacity
-            style={[styles.addMovelBtn, { backgroundColor: colors.primary + "15", borderColor: colors.primary }]}
-            onPress={handleAddMovel}
-            activeOpacity={0.7}
-          >
-            <MaterialIcons name="add-circle-outline" size={22} color={colors.primary} />
-            <Text style={[styles.addMovelText, { color: colors.primary }]}>
-              {moveis.length === 0 ? "Adicionar móvel/serviço" : "Adicionar outro móvel/serviço"}
-            </Text>
+        <Input label="Observações gerais" value={descricao} onChangeText={setDescricao} placeholder="Detalhes do serviço..." multiline numberOfLines={3} style={{ height: 80, textAlignVertical: "top" }} />
+        <View style={{ marginTop: 8 }}>
+          <TouchableOpacity onPress={() => setTemRetorno(!temRetorno)} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <View style={[styles.checkbox, { backgroundColor: temRetorno ? colors.primary : colors.surface, borderColor: colors.border }]}>
+              {temRetorno && <MaterialIcons name="check" size={16} color="#fff" />}
+            </View>
+            <Text style={[styles.label, { color: colors.foreground, marginBottom: 0 }]}>Agendar retorno para finalizar</Text>
           </TouchableOpacity>
-        )}
-
-        {/* ── OBSERVAÇÕES ─────────────────────────────────────────────────── */}
-        <Input
-          label="Observações"
-          value={descricao}
-          onChangeText={setDescricao}
-          placeholder="Detalhes do serviço..."
-          multiline
-          numberOfLines={3}
-          style={{ height: 80, textAlignVertical: "top" }}
-        />
-
-        {/* ── RETORNO PARA FINALIZAR ──────────────────────────────────────── */}
-        <View style={{ marginTop: 20 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-            <TouchableOpacity
-              onPress={() => setTemRetorno(!temRetorno)}
-              activeOpacity={0.7}
-              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            >
-              <View
-                style={[
-                  styles.checkbox,
-                  {
-                    backgroundColor: temRetorno ? colors.primary : colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                {temRetorno && <MaterialIcons name="check" size={16} color="#fff" />}
-              </View>
-              <Text style={[styles.label, { color: colors.foreground }]}>
-                Agendar retorno para finalizar
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           {temRetorno && (
             <View style={{ gap: 12 }}>
-              <DatePicker
-                label="Data do Retorno"
-                value={dataRetorno}
-                onChange={setDataRetorno}
-              />
-
+              <DatePicker label="Data do Retorno" value={dataRetorno} onChange={setDataRetorno} />
               <TouchableOpacity
-                onPress={() => {
-                  setTimePickerMode("retorno");
-                  setShowTimePicker(true);
-                }}
-                style={[
-                  styles.dateInput,
-                  { backgroundColor: colors.surface, borderColor: colors.border },
-                ]}
+                onPress={() => { setTimePickerMode("retorno"); setShowTimePicker(true); }}
+                style={[styles.dateInput, { backgroundColor: colors.surface, borderColor: colors.border }]}
               >
                 <MaterialIcons name="schedule" size={20} color={colors.primary} />
-                <Text style={[styles.dateInputText, { color: colors.foreground }]}>
-                  {horaRetorno || "Selecionar horário"}
-                </Text>
+                <Text style={[styles.dateInputText, { color: colors.foreground }]}>{horaRetorno || "Selecionar horário"}</Text>
               </TouchableOpacity>
-
               <TextInput
                 placeholder="Endereço do retorno (opcional)"
                 placeholderTextColor={colors.muted}
                 value={enderecoRetorno}
                 onChangeText={setEnderecoRetorno}
-                style={[
-                  styles.input,
-                  { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground },
-                ]}
+                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
               />
             </View>
           )}
         </View>
+      </View>
+    );
+  }
 
-        {/* ── RESUMO DE VALORES ───────────────────────────────────────────── */}
-        {moveis.length > 0 && (
-          <View style={[styles.resumoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.resumoTitle, { color: colors.foreground }]}>Resumo de Valores</Text>
-            {moveis.map((movel, idx) => {
-              const valor = parseFloat((movel.valor || "0").replace(",", "."));
-              const total = valor * movel.quantidade;
-              return (
-                <View key={idx} style={[styles.resumoRow, { borderBottomColor: colors.border }]}>
-                  <Text style={[styles.resumoLabel, { color: colors.muted }]}>
-                    {movel.servicoNome} ({movel.quantidade}x)
-                  </Text>
-                  <Text style={[styles.resumoValue, { color: colors.foreground }]}>
-                    R$ {total.toFixed(2)}
-                  </Text>
-                </View>
-              );
-            })}
-            {(() => {
-              const valorTotal = moveis.reduce((sum, movel) => {
-                const valor = parseFloat((movel.valor || "0").replace(",", "."));
-                return sum + (valor * movel.quantidade);
-              }, 0);
-              const valorAgendamento = temRetorno ? valorTotal / 2 : valorTotal;
-              const valorRetorno = temRetorno ? valorTotal / 2 : 0;
-              return (
-                <>
-                  <View style={[styles.resumoRow, { borderBottomColor: colors.border }]}>
-                    <Text style={[styles.resumoTotal, { color: colors.foreground }]}>Valor Total</Text>
-                    <Text style={[styles.resumoTotal, { color: colors.primary }]}>
-                      R$ {valorTotal.toFixed(2)}
-                    </Text>
-                  </View>
-                  {temRetorno && (
-                    <>
-                      <View style={[styles.resumoRow, { borderBottomColor: colors.border }]}>
-                        <Text style={[styles.resumoLabel, { color: colors.muted }]}>Agendamento (50%)</Text>
-                        <Text style={[styles.resumoValue, { color: colors.foreground }]}>
-                          R$ {valorAgendamento.toFixed(2)}
-                        </Text>
-                      </View>
-                      <View style={styles.resumoRow}>
-                        <Text style={[styles.resumoLabel, { color: colors.muted }]}>Retorno (50%)</Text>
-                        <Text style={[styles.resumoValue, { color: colors.foreground }]}>
-                          R$ {valorRetorno.toFixed(2)}
-                        </Text>
-                      </View>
-                    </>
-                  )}
-                </>
-              );
-            })()}
+  // ── Passo 4: Confirmação ─────────────────────────────────────────────────
+  function renderPasso4() {
+    const total = calcTotal();
+    const valorEntrada = temRetorno ? total / 2 : total;
+    const valorRetornoVal = temRetorno ? total / 2 : 0;
+    let listaItens = [...moveis];
+    if (servicoSelecionado && valor) {
+      const qtd = Math.max(1, parseInt(quantidadeMovel, 10) || 1);
+      listaItens = [...listaItens, { id: "_cur", servicoId: servicoSelecionado.id, servicoNome: servicoSelecionado.nome, valor, quantidade: qtd, observacao: observacaoMovel.trim() || undefined }];
+    }
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 4: Confirmação</Text>
+        <View style={[styles.confirmaCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.confirmaSection, { color: colors.muted }]}>CLIENTE</Text>
+          <Text style={[styles.confirmaValue, { color: colors.foreground }]}>{clienteSelecionado?.nome}</Text>
+          <Text style={[styles.confirmaSmall, { color: colors.muted }]}>{clienteSelecionado?.telefone}</Text>
+          <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.confirmaSection, { color: colors.muted }]}>SERVIÇO</Text>
+          <Text style={[styles.confirmaValue, { color: colors.foreground }]}>{servicoSelecionado?.nome || moveis[0]?.servicoNome || "—"}</Text>
+          <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.confirmaSection, { color: colors.muted }]}>DATA E HORÁRIO</Text>
+          <View style={{ flexDirection: "row", gap: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MaterialIcons name="event" size={14} color={colors.primary} />
+              <Text style={[styles.confirmaValue, { color: colors.foreground }]}>
+                {data ? new Date(data + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MaterialIcons name="access-time" size={14} color={colors.primary} />
+              <Text style={[styles.confirmaValue, { color: colors.foreground }]}>{hora}</Text>
+            </View>
           </View>
-        )}
+          {!!endereco && (
+            <>
+              <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.confirmaSection, { color: colors.muted }]}>ENDEREÇO</Text>
+              <Text style={[styles.confirmaValue, { color: colors.foreground }]}>{endereco}</Text>
+            </>
+          )}
+          <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+          <Text style={[styles.confirmaSection, { color: colors.muted }]}>ITENS</Text>
+          {listaItens.map((m, i) => {
+            const v = parseFloat((m.valor || "0").replace(",", "."));
+            return (
+              <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 2 }}>
+                <Text style={[styles.confirmaSmall, { color: colors.foreground }]}>{m.servicoNome} ({m.quantidade}x)</Text>
+                <Text style={[styles.confirmaSmall, { color: colors.foreground }]}>R$ {(v * m.quantidade).toFixed(2)}</Text>
+              </View>
+            );
+          })}
+          <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={[styles.confirmaSection, { color: colors.muted }]}>VALOR TOTAL</Text>
+            <Text style={[styles.confirmaTotal, { color: colors.success }]}>R$ {total.toFixed(2)}</Text>
+          </View>
+          {temRetorno && (
+            <>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                <Text style={[styles.confirmaSmall, { color: colors.muted }]}>Entrada (50%)</Text>
+                <Text style={[styles.confirmaSmall, { color: colors.foreground }]}>R$ {valorEntrada.toFixed(2)}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={[styles.confirmaSmall, { color: colors.muted }]}>Retorno (50%)</Text>
+                <Text style={[styles.confirmaSmall, { color: colors.foreground }]}>R$ {valorRetornoVal.toFixed(2)}</Text>
+              </View>
+              <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.confirmaSection, { color: colors.muted }]}>RETORNO</Text>
+              <Text style={[styles.confirmaValue, { color: colors.foreground }]}>
+                {dataRetorno ? new Date(dataRetorno + "T12:00:00").toLocaleDateString("pt-BR") : "—"} às {horaRetorno}
+              </Text>
+              {!!enderecoRetorno && <Text style={[styles.confirmaSmall, { color: colors.muted }]}>{enderecoRetorno}</Text>}
+            </>
+          )}
+          {!!descricao && (
+            <>
+              <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.confirmaSection, { color: colors.muted }]}>OBSERVAÇÕES</Text>
+              <Text style={[styles.confirmaSmall, { color: colors.foreground }]}>{descricao}</Text>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
 
-        <Button title="Salvar Agendamento" onPress={salvar} loading={saving} style={styles.saveBtn} />
+  return (
+    <ScreenContainer edges={["top", "left", "right", "bottom"]}>
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.primary }]}>
+        <TouchableOpacity onPress={voltar} activeOpacity={0.7}>
+          <MaterialIcons name="arrow-back" size={26} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Novo Agendamento</Text>
+        <View style={{ width: 26 }} />
+      </View>
+
+      {/* Stepper */}
+      {renderStepper()}
+
+      <ScrollView
+        contentContainerStyle={styles.form}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={() => setMostrarSugestoes(false)}
+      >
+        {step === 1 && renderPasso1()}
+        {step === 2 && renderPasso2()}
+        {step === 3 && renderPasso3()}
+        {step === 4 && renderPasso4()}
       </ScrollView>
 
-      {/* ══ MODAL: Contatos do celular (busca + seleção única) ══════════════ */}
+      {/* Footer wizard */}
+      <View style={[styles.wizardFooter, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.wizardBtnVoltar, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          onPress={voltar}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.wizardBtnVoltarText, { color: colors.foreground }]}>
+            {step === 1 ? "Cancelar" : "Voltar"}
+          </Text>
+        </TouchableOpacity>
+        {step < 4 ? (
+          <TouchableOpacity
+            style={[styles.wizardBtnProximo, { backgroundColor: colors.primary }]}
+            onPress={avancar}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.wizardBtnProximoText}>Próximo</Text>
+            <MaterialIcons name="arrow-forward" size={18} color="#fff" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.wizardBtnProximo, { backgroundColor: saving ? colors.border : colors.primary }]}
+            onPress={salvar}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            {saving ? (
+              <Text style={styles.wizardBtnProximoText}>Salvando...</Text>
+            ) : (
+              <>
+                <MaterialIcons name="check" size={18} color="#fff" />
+                <Text style={styles.wizardBtnProximoText}>Salvar</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* ══ MODAL: Contatos do celular ══════════════════════════════════════ */}
       <Modal visible={modalContatos} animationType="slide">
         <ScreenContainer edges={["top", "left", "right", "bottom"]}>
           <View style={[styles.header, { backgroundColor: colors.primary }]}>
@@ -1484,4 +1481,26 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
+
+  // Wizard styles
+  stepper: { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 16, paddingVertical: 10 },
+  stepCol: { alignItems: "center", gap: 4 },
+  stepLine: { height: 2, width: 20, marginHorizontal: 2, marginTop: 10, alignSelf: "flex-start" },
+  stepCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  stepNum: { fontSize: 12, fontWeight: "700" },
+  stepLabel: { fontSize: 10, fontWeight: "600", maxWidth: 60, textAlign: "center" },
+  stepContent: { gap: 4 },
+  stepTitle: { fontSize: 17, fontWeight: "700", marginBottom: 12 },
+  wizardFooter: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1 },
+  wizardBtnVoltar: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  wizardBtnVoltarText: { fontSize: 15, fontWeight: "600" },
+  wizardBtnProximo: { flex: 2, flexDirection: "row", paddingVertical: 14, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 6 },
+  wizardBtnProximoText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  emptyClienteCard: { alignItems: "center", justifyContent: "center", gap: 10, padding: 32, borderRadius: 12, borderWidth: 1, borderStyle: "dashed", marginTop: 8 },
+  confirmaCard: { borderWidth: 1, borderRadius: 14, padding: 16, gap: 6, marginBottom: 12 },
+  confirmaSection: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, marginTop: 4 },
+  confirmaValue: { fontSize: 15, fontWeight: "600" },
+  confirmaSmall: { fontSize: 13 },
+  confirmaDivider: { height: 1, marginVertical: 8 },
+  confirmaTotal: { fontSize: 20, fontWeight: "800" },
 });
