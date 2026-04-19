@@ -97,7 +97,7 @@ export default function ClienteDetalheScreen() {
                 Endereços anteriores:
               </Text>
               {cliente.historicoEnderecos!.map((end, idx) => (
-                <Text key={idx} style={[styles.addr, { color: colors.muted }]}>• {end}</Text>
+                <Text key={`${end}-${idx}`} style={[styles.addr, { color: colors.muted }]}>• {end}</Text>
               ))}
             </View>
           )}
