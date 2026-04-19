@@ -66,6 +66,7 @@ export interface Agendamento {
   enderecoRetorno?: string; // Endereço do retorno (pode ser diferente do inicial)
   valorRecebido?: number; // Valor realmente recebido do cliente (pode ser diferente do orçado)
   dataConclusao?: string; // Data e hora de conclusão
+  fotos?: string[]; // URIs das fotos dos móveis registradas no serviço
   criadoEm: string;
   atualizadoEm?: string;
 }

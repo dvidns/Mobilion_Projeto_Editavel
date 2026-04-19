@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, FlatList,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, Image, Modal,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -24,6 +24,7 @@ export default function ClienteDetalheScreen() {
   const router = useRouter();
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [historico, setHistorico] = useState<Agendamento[]>([]);
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([getClientes(), getAgendamentos()]).then(([clientes, ags]) => {
@@ -142,10 +143,53 @@ export default function ClienteDetalheScreen() {
                   <StatusBadge status={a.status} />
                 </View>
               </View>
+              {(a.fotos?.length ?? 0) > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.histFotosRow}
+                  style={{ marginTop: 8 }}
+                >
+                  {a.fotos!.map((uri, idx) => (
+                    <TouchableOpacity
+                      key={`${uri}-${idx}`}
+                      onPress={(e) => { e.stopPropagation?.(); setFotoAmpliada(uri); }}
+                      activeOpacity={0.85}
+                    >
+                      <Image
+                        source={{ uri }}
+                        style={[styles.histFotoThumb, { borderColor: colors.border }]}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
             </Card>
           ))
         )}
       </ScrollView>
+
+      {/* Modal foto ampliada */}
+      <Modal
+        visible={!!fotoAmpliada}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFotoAmpliada(null)}
+      >
+        <TouchableOpacity
+          style={styles.fotoModalOverlay}
+          activeOpacity={1}
+          onPress={() => setFotoAmpliada(null)}
+        >
+          {fotoAmpliada && (
+            <Image
+              source={{ uri: fotoAmpliada }}
+              style={styles.fotoAmpliada}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -278,5 +322,26 @@ const styles = StyleSheet.create({
   histValue: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  histFotosRow: {
+    gap: 6,
+    paddingVertical: 2,
+  },
+  histFotoThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  fotoModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fotoAmpliada: {
+    width: "95%",
+    height: "75%",
+    borderRadius: 12,
   },
 });
