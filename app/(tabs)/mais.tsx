@@ -47,6 +47,13 @@ const MENU_ITEMS: MenuItem[] = [
     color: "#34A853",
   },
   {
+    icon: "inventory-2",
+    label: "Estoque & Materiais",
+    desc: "Móveis, peças e controle de estoque",
+    route: "/tabela-precos",
+    color: "#F59E0B",
+  },
+  {
     icon: "settings",
     label: "Configurações",
     desc: "Seus dados e preferências",

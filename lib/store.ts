@@ -115,6 +115,8 @@ const KEYS = {
   valorHora: "@montafacil:valor_hora",
   moveis: "@montafacil:moveis",
   lembrete: "@montafacil:lembrete_personalizado",
+  itensEstoque: "@montafacil:itens_estoque",
+  margemLucro: "@montafacil:margem_lucro",
 };
 
 // ─── Preferência WhatsApp ─────────────────────────────────────────────────────
@@ -499,4 +501,54 @@ export async function getValorHora(): Promise<number> {
 
 export async function saveValorHora(valor: number): Promise<void> {
   await AsyncStorage.setItem(KEYS.valorHora, String(valor));
+}
+
+// ─── Tabela de Preços / Estoque ───────────────────────────────────────────────
+
+export type CategoriaItem = "movel" | "peca";
+
+export interface ItemEstoque {
+  id: string;
+  nome: string;
+  categoria: CategoriaItem; // "movel" | "peca"
+  precoUnitario: number;    // Custo/preço unitário
+  estoque: number;          // Quantidade em estoque
+  estoqueMinimo: number;    // Alerta quando estoque <= estoqueMinimo
+  criadoEm: string;
+}
+
+export async function getItensEstoque(): Promise<ItemEstoque[]> {
+  const raw = await AsyncStorage.getItem(KEYS.itensEstoque);
+  if (!raw) return [];
+  return JSON.parse(raw) as ItemEstoque[];
+}
+
+export async function saveItensEstoque(itens: ItemEstoque[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.itensEstoque, JSON.stringify(itens));
+}
+
+export async function addItemEstoque(data: Omit<ItemEstoque, "id" | "criadoEm">): Promise<ItemEstoque> {
+  const itens = await getItensEstoque();
+  const novo: ItemEstoque = { ...data, id: uuid(), criadoEm: new Date().toISOString() };
+  await saveItensEstoque([...itens, novo]);
+  return novo;
+}
+
+export async function updateItemEstoque(id: string, data: Partial<ItemEstoque>): Promise<void> {
+  const itens = await getItensEstoque();
+  await saveItensEstoque(itens.map((i) => (i.id === id ? { ...i, ...data } : i)));
+}
+
+export async function deleteItemEstoque(id: string): Promise<void> {
+  const itens = await getItensEstoque();
+  await saveItensEstoque(itens.filter((i) => i.id !== id));
+}
+
+export async function getMargemLucro(): Promise<number> {
+  const raw = await AsyncStorage.getItem(KEYS.margemLucro);
+  return raw ? parseFloat(raw) : 50; // Padrão 50%
+}
+
+export async function saveMargemLucro(margem: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.margemLucro, String(margem));
 }
