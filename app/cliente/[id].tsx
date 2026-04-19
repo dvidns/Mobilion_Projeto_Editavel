@@ -49,6 +49,11 @@ export default function ClienteDetalheScreen() {
     Linking.openURL(`https://wa.me/55${tel}`);
   }
 
+  function abrirMaps(endereco: string) {
+    const query = encodeURIComponent(endereco);
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+  }
+
   function confirmDelete() {
     Alert.alert("Excluir cliente", `Excluir ${cliente!.nome}?`, [
       { text: "Cancelar", style: "cancel" },
@@ -89,7 +94,9 @@ export default function ClienteDetalheScreen() {
             <Text style={[styles.addr, { color: colors.muted }]}>📍 {cliente.bairro}</Text>
           )}
           {cliente.endereco && (
-            <Text style={[styles.addr, { color: colors.muted }]}>🏠 {cliente.endereco}</Text>
+            <TouchableOpacity onPress={() => abrirMaps(cliente!.endereco!)} activeOpacity={0.7}>
+              <Text style={[styles.addr, { color: colors.primary }]}>🏠 {cliente.endereco}</Text>
+            </TouchableOpacity>
           )}
           {(cliente.historicoEnderecos?.length ?? 0) > 0 && (
             <View style={{ marginTop: 6, alignSelf: "stretch" }}>
@@ -97,7 +104,9 @@ export default function ClienteDetalheScreen() {
                 Endereços anteriores:
               </Text>
               {cliente.historicoEnderecos!.map((end, idx) => (
-                <Text key={`${end}-${idx}`} style={[styles.addr, { color: colors.muted }]}>• {end}</Text>
+                <TouchableOpacity key={`${end}-${idx}`} onPress={() => abrirMaps(end)} activeOpacity={0.7}>
+                  <Text style={[styles.addr, { color: colors.primary }]}>• {end}</Text>
+                </TouchableOpacity>
               ))}
             </View>
           )}
