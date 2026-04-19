@@ -5,6 +5,9 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 
+// 🔒 Manter false até ativar assinaturas na Play Store
+const PLANOS_ENABLED = false;
+
 interface MenuItem {
   icon: string;
   label: string;
@@ -64,6 +67,24 @@ export default function MaisScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.sectionTitle, { color: colors.muted }]}>FERRAMENTAS</Text>
+
+        {/* Planos / Assinatura — visível apenas quando PLANOS_ENABLED = true */}
+        {PLANOS_ENABLED && (
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: "#FFF7ED", borderColor: "#FB923C", borderWidth: 1.5 }]}
+            onPress={() => router.push("/planos" as any)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#FB923C18" }]}>
+              <MaterialIcons name="workspace-premium" size={26} color="#FB923C" />
+            </View>
+            <View style={styles.menuInfo}>
+              <Text style={[styles.menuLabel, { color: colors.foreground }]}>Planos e Assinatura</Text>
+              <Text style={[styles.menuDesc, { color: colors.muted }]}>Desbloqueie todos os recursos Pro</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.muted} />
+          </TouchableOpacity>
+        )}
 
         {MENU_ITEMS.map((item) => (
           <TouchableOpacity
