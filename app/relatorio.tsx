@@ -127,9 +127,17 @@ export default function RelatorioScreen() {
         nomeArquivo = `relatorio_${dataInicio}_${dataFim}.xlsx`;
         tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       } else if (formato === "pdf") {
-        conteudo = await gerarRelatorioPDF(dataInicio, dataFim);
-        nomeArquivo = `relatorio_${dataInicio}_${dataFim}.pdf`;
-        tipo = "application/pdf";
+        const pdfUri = await gerarRelatorioPDF(dataInicio, dataFim);
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(pdfUri, {
+            mimeType: "application/pdf",
+            dialogTitle: "Compartilhar PDF",
+          });
+        } else {
+          Alert.alert("Sucesso", `Relatório salvo em: ${pdfUri}`);
+        }
+        setMostraDownload(false);
+        return;
       } else {
         conteudo = await gerarRelatorioCSV(dataInicio, dataFim);
         nomeArquivo = `relatorio_${dataInicio}_${dataFim}.csv`;

@@ -177,7 +177,7 @@ export async function generateOrcamentoPDF(data: {
     `;
 
     if (Platform.OS !== "web") {
-      const { uri } = await Print.printToFileAsync({ html });
+      const { uri } = await Print.printToFileAsync({ html, width: 794 });
       return uri;
     }
 
@@ -326,7 +326,7 @@ export async function generateOrdemServiçoPDF(data: {
     `;
 
     if (Platform.OS !== "web") {
-      const { uri } = await Print.printToFileAsync({ html });
+      const { uri } = await Print.printToFileAsync({ html, width: 794 });
       return uri;
     }
 
