@@ -9,7 +9,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { getServicos, updateServico, getValorHora, saveValorHora, type Servico } from "@/lib/store";
 
-const CATEGORIAS = ["Todos", "Quarto", "Cozinha", "Sala", "Escritório", "Desmontagem", "Outros"];
+const CATEGORIAS = ["Todos", "Quarto", "Cozinha", "Sala", "Escritório", "Desmontagem", "Outros", "Customizado"];
 
 function formatMoney(v: number) {
   return `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}`;
@@ -24,6 +24,7 @@ export default function ServicosScreen() {
   const [novoNome, setNovoNome] = useState("");
   const [novoValor, setNovoValor] = useState("");
   const [novoTempo, setNovoTempo] = useState("");
+  const [novaCategoria, setNovaCategoria] = useState("Customizado");
   const [valorHora, setValorHora] = useState("0");
   const [mostraConfigValorHora, setMostraConfigValorHora] = useState(false);
 
@@ -45,6 +46,15 @@ export default function ServicosScreen() {
     setNovoNome(s.nome);
     setNovoValor(String(s.valorSugerido));
     setNovoTempo(String(s.tempoEstimadoHoras || ""));
+    setNovaCategoria(s.categoria || "Customizado");
+  }
+
+  function abrirNovoServico() {
+    setEditando({ id: "new", nome: "", categoria: "Customizado", valorMin: 0, valorMax: 0, valorSugerido: 0 });
+    setNovoNome("");
+    setNovoValor("");
+    setNovoTempo("");
+    setNovaCategoria("Customizado");
   }
 
   async function salvarEdicao() {
@@ -78,7 +88,7 @@ export default function ServicosScreen() {
       const novoServico: Servico = {
         id: Date.now().toString(),
         nome: novoNome.trim(),
-        categoria: "Customizado",
+        categoria: novaCategoria,
         valorMin: v,
         valorMax: v,
         valorSugerido: v,
@@ -97,6 +107,7 @@ export default function ServicosScreen() {
     } else {
       await updateServico(editando.id, {
         nome: novoNome.trim(),
+        categoria: novaCategoria,
         valorSugerido: v,
         tempoEstimadoHoras: tempo,
       });
@@ -216,17 +227,30 @@ export default function ServicosScreen() {
         )}
       />
 
-      {/* Edit modal */}
+      {/* FAB: Adicionar novo serviço */}
+      <TouchableOpacity
+        style={[styles.fabButton, { backgroundColor: colors.primary }]}
+        onPress={abrirNovoServico}
+        activeOpacity={0.85}
+        accessibilityLabel="Adicionar novo serviço"
+        accessibilityRole="button"
+      >
+        <MaterialIcons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Edit / New modal */}
       <Modal visible={!!editando} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalContainer}>
             <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-                Editar Serviço
+                {editando?.id === "new" ? "Novo Móvel/Serviço" : "Editar Serviço"}
               </Text>
-              <Text style={[styles.modalSub, { color: colors.muted }]}>
-                Referência: {editando ? formatMoney(editando.valorMin) : ""} – {editando ? formatMoney(editando.valorMax) : ""}
-              </Text>
+              {editando?.id !== "new" && (
+                <Text style={[styles.modalSub, { color: colors.muted }]}>
+                  Referência: {editando ? formatMoney(editando.valorMin) : ""} – {editando ? formatMoney(editando.valorMax) : ""}
+                </Text>
+              )}
 
               {/* Nome */}
               <Text style={[styles.modalLabel, { color: colors.muted }]}>Nome do serviço:</Text>
@@ -236,7 +260,35 @@ export default function ServicosScreen() {
                 onChangeText={setNovoNome}
                 placeholder="Ex: Montagem de Guarda-roupa"
                 placeholderTextColor={colors.muted}
+                autoFocus={editando?.id === "new"}
               />
+
+              {/* Categoria */}
+              <Text style={[styles.modalLabel, { color: colors.muted }]}>Categoria:</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 4 }}
+                contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
+              >
+                {["Quarto", "Cozinha", "Sala", "Escritório", "Desmontagem", "Outros", "Customizado"].map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.catBtn,
+                      novaCategoria === cat
+                        ? { backgroundColor: colors.primary }
+                        : { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 },
+                    ]}
+                    onPress={() => setNovaCategoria(cat)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.catText, { color: novaCategoria === cat ? "#fff" : colors.muted }]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
               {/* Preço */}
               <Text style={[styles.modalLabel, { color: colors.muted }]}>Preço (R$):</Text>
