@@ -122,7 +122,7 @@ export default function HomeScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <Card onPress={() => handleStatusChange(item)}>
+          <Card onPress={() => router.push(`/agendamento/${item.id}` as any)}>
             <View style={styles.cardRow}>
               <View style={[styles.timeBox, { backgroundColor: colors.primary + "18" }]}>
                 <Text style={[styles.timeText, { color: colors.primary }]}>{item.hora}</Text>

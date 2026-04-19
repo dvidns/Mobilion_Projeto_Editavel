@@ -647,31 +647,33 @@ export default function AgendamentoDetalheScreen() {
           <Row label="Data" value={formatDate(item.data)} />
           <Row label="Horário" value={item.hora} />
           <Row label="Serviço" value={item.tipoServico} />
-          <Row label="Valor Orçado" value={formatMoney(item.valor)} highlight />
 
-          {!!item.moveis?.length && (
-            <View style={{ marginTop: 10, gap: 6 }}>
-              <Text style={[styles.cardTitle, { color: colors.muted }]}>Itens do Agendamento</Text>
-              {item.moveis.map((movel) => {
-                const subtotal = (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1);
-                return (
-                  <View key={movel.id} style={{ marginBottom: 8 }}>
-                    <View style={styles.row}>
-                      <Text style={[styles.rowLabel, { color: colors.foreground }]}>
-                        {movel.servicoNome} ({movel.quantidade}x)
-                      </Text>
-                      <Text style={[styles.rowValue, { color: colors.muted }]}>R$ {subtotal.toFixed(2)}</Text>
-                    </View>
-                    {!!movel.observacao?.trim() && (
-                      <Text style={[styles.rowValue, { color: colors.muted, marginTop: 2 }]}>📝 {movel.observacao}</Text>
-                    )}
-                  </View>
-                );
-              })}
+          {/* Valor Total em destaque */}
+          <View style={styles.valorRow}>
+            <Text style={[styles.valorLabel, { color: colors.foreground }]}>Valor Total Orçado:</Text>
+            <Text style={[styles.valorDestaque, { color: colors.success }]}>{formatMoney(item.valor)}</Text>
+          </View>
+
+          {/* Split de pagamento para retorno */}
+          {item.temRetorno && (
+            <View style={{ gap: 2, marginTop: 2 }}>
+              <View style={styles.row}>
+                <Text style={[styles.rowLabel, { color: colors.muted }]}>Pagamento:</Text>
+                <Text style={[styles.rowValue, { color: colors.foreground }]}>
+                  {formatMoney(item.valor / 2)}{" "}
+                  <Text style={{ color: colors.muted, fontWeight: "400" }}>(50%) na Entrada</Text>
+                </Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={[styles.rowValue, { color: colors.foreground }]}>
+                  {formatMoney(item.valor / 2)}{" "}
+                  <Text style={{ color: colors.muted, fontWeight: "400" }}>(50%) no Retorno</Text>
+                </Text>
+              </View>
             </View>
           )}
-          
-          {/* Mostrar valor recebido se agendamento foi concluído */}
+
+          {/* Valor recebido se concluído */}
           {item.status === "concluido" && item.valorRecebido !== undefined && (
             <>
               <Row label="Valor Recebido" value={formatMoney(item.valorRecebido)} highlight />
@@ -684,46 +686,6 @@ export default function AgendamentoDetalheScreen() {
               )}
             </>
           )}
-          
-          {item.endereco && (
-            <TouchableOpacity
-              onPress={() => {
-                const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(item.endereco || "")}`;
-                Linking.openURL(mapsUrl).catch(() => {
-                  Linking.openURL("https://www.google.com/maps");
-                });
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.row}>
-                <Text style={[styles.rowLabel, { color: colors.muted }]}>Endereço</Text>
-                <Text style={[styles.rowValue, { color: colors.primary, textDecorationLine: "underline" }]}>
-                  📍 {item.endereco}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          {item.descricao && <Row label="Observações" value={item.descricao} />}
-          {item.temRetorno && item.dataRetorno && (
-            <>
-              <Row label="Retorno - Data" value={new Date(item.dataRetorno + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} />
-              <Row label="Retorno - Horário" value={item.horaRetorno || "—"} />
-              {item.enderecoRetorno && (
-                <TouchableOpacity
-                  onPress={() => Linking.openURL(`https://www.google.com/maps/search/${encodeURIComponent(item.enderecoRetorno || "")}`)}  
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.row}>
-                    <Text style={[styles.rowLabel, { color: colors.muted }]}>Retorno - Endereço</Text>
-                    <Text style={[styles.rowValue, { color: colors.primary, textDecorationLine: "underline" }]}>
-                      📍 {item.enderecoRetorno}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              <Row label="Valor Retorno (50%)" value={formatMoney(item.valor)} highlight />
-            </>
-          )}
         </View>
 
         {/* Fotos dos Móveis */}
@@ -734,6 +696,87 @@ export default function AgendamentoDetalheScreen() {
               label="Fotos dos Móveis"
               readonly
             />
+          </View>
+        )}
+
+        {/* Itens do Agendamento — card separado */}
+        {!!item.moveis?.length && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardTitle, { color: colors.muted }]}>Itens do Agendamento:</Text>
+            {item.moveis.map((movel) => {
+              const subtotal = (Number(movel.valor) || 0) * (Number(movel.quantidade) || 1);
+              return (
+                <View key={movel.id} style={{ marginBottom: 4 }}>
+                  <View style={styles.row}>
+                    <Text style={[styles.rowLabel, { color: colors.foreground }]}>
+                      {movel.servicoNome} ({movel.quantidade}x)
+                    </Text>
+                    <Text style={[styles.rowValue, { color: colors.foreground }]}>R$ {subtotal.toFixed(2)}</Text>
+                  </View>
+                  {!!movel.observacao?.trim() && (
+                    <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }}>📝 {movel.observacao}</Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Endereço standalone */}
+        {item.endereco && (
+          <TouchableOpacity
+            onPress={() => {
+              const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(item.endereco || "")}`;
+              Linking.openURL(mapsUrl).catch(() => Linking.openURL("https://www.google.com/maps"));
+            }}
+            activeOpacity={0.7}
+            style={styles.enderecoRow}
+          >
+            <MaterialIcons name="location-on" size={18} color="#E53935" />
+            <Text style={styles.enderecoText}>{item.endereco}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Observações standalone */}
+        {item.descricao && (
+          <View style={styles.obsRow}>
+            <Text style={[styles.obsLabel, { color: colors.muted }]}>Observações: </Text>
+            <Text style={[styles.obsValue, { color: colors.foreground }]}>{item.descricao}</Text>
+          </View>
+        )}
+
+        {/* Próximo Compromisso */}
+        {item.temRetorno && item.dataRetorno && (
+          <View style={[styles.retornoBlock, { borderColor: colors.border }]}>
+            <View style={styles.row}>
+              <Text style={[styles.retornoLabel, { color: colors.muted }]}>Próximo Compromisso:</Text>
+              <Text style={[styles.retornoValue, { color: colors.foreground }]}>
+                {new Date(item.dataRetorno + "T12:00:00").toLocaleDateString("pt-BR", {
+                  weekday: "long", day: "numeric", month: "long", year: "numeric",
+                })}
+              </Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={[styles.retornoLabel, { color: colors.muted }]}>Horário:</Text>
+              <Text style={[styles.retornoValue, { color: colors.foreground }]}>{item.horaRetorno || "—"}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={[styles.retornoLabel, { color: colors.muted }]}>Valor Retorno:</Text>
+              <Text style={[styles.retornoValue, { color: colors.success }]}>
+                {formatMoney(item.valor)}{" "}
+                <Text style={{ color: colors.success, fontWeight: "400" }}>(50%)</Text>
+              </Text>
+            </View>
+            {item.enderecoRetorno && (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(`https://www.google.com/maps/search/${encodeURIComponent(item.enderecoRetorno || "")}`)}
+                activeOpacity={0.7}
+                style={styles.enderecoRow}
+              >
+                <MaterialIcons name="location-on" size={18} color="#E53935" />
+                <Text style={styles.enderecoText}>{item.enderecoRetorno}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -977,6 +1020,63 @@ const styles = StyleSheet.create({
   miniActionText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  valorRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  valorLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  valorDestaque: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  enderecoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  enderecoText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#E53935",
+    textDecorationLine: "underline",
+  },
+  obsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  obsLabel: {
+    fontSize: 14,
+  },
+  obsValue: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  retornoBlock: {
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  retornoLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  retornoValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "right",
+    flexShrink: 1,
   },
   deleteBtn: {
     flexDirection: "row",
