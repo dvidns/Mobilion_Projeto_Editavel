@@ -12,6 +12,7 @@ export interface Cliente {
   endereco?: string;
   bairro?: string;
   notas?: string;
+  historicoEnderecos?: string[]; // Histórico de endereços anteriores
   criadoEm: string;
 }
 
@@ -268,6 +269,32 @@ export async function addCliente(data: Omit<Cliente, "id" | "criadoEm">): Promis
 export async function updateCliente(id: string, data: Partial<Cliente>): Promise<void> {
   const clientes = await getClientes();
   await saveClientes(clientes.map((c) => (c.id === id ? { ...c, ...data } : c)));
+}
+
+/**
+ * Atualiza o endereço do cliente mantendo um histórico dos endereços anteriores.
+ * Se o novo endereço for igual ao atual, nenhuma alteração é feita.
+ */
+export async function atualizarEnderecoCliente(id: string, novoEndereco: string): Promise<void> {
+  const novoEnderecoTrimmed = novoEndereco.trim();
+  if (!novoEnderecoTrimmed) return;
+
+  const clientes = await getClientes();
+  const updated = clientes.map((c) => {
+    if (c.id !== id) return c;
+    const enderecoAtual = (c.endereco ?? "").trim();
+    if (!enderecoAtual || enderecoAtual === novoEnderecoTrimmed) {
+      // Sem endereço anterior ou mesmo endereço: apenas atualiza
+      return { ...c, endereco: novoEnderecoTrimmed };
+    }
+    // Endereço diferente: move o atual para o histórico
+    const historico = c.historicoEnderecos ?? [];
+    const novoHistorico = historico.includes(enderecoAtual)
+      ? historico
+      : [enderecoAtual, ...historico];
+    return { ...c, endereco: novoEnderecoTrimmed, historicoEnderecos: novoHistorico };
+  });
+  await saveClientes(updated);
 }
 
 export async function deleteCliente(id: string): Promise<void> {

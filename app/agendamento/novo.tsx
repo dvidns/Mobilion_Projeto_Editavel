@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
-  addAgendamento, getClientes, addCliente, updateCliente, getServicos, addServico,
+  addAgendamento, getClientes, addCliente, updateCliente, atualizarEnderecoCliente, getServicos, addServico,
   type Cliente, type Servico,
 } from "@/lib/store";
 
@@ -346,6 +346,11 @@ export default function NovoAgendamentoScreen() {
       const enderecoTrimmed = endereco.trim();
       if (enderecoTrimmed && !clienteSelecionado.endereco) {
         await updateCliente(clienteSelecionado.id, { endereco: enderecoTrimmed });
+      }
+
+      // Atualizar endereço do cliente quando há endereço de retorno definido
+      if (temRetorno && enderecoRetorno.trim()) {
+        await atualizarEnderecoCliente(clienteSelecionado.id, enderecoRetorno.trim());
       }
 
       router.back();
