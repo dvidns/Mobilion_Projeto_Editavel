@@ -241,7 +241,7 @@ export default function ServicosScreen() {
       {/* Edit / New modal */}
       <Modal visible={!!editando} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalContainer}>
+          <ScrollView contentContainerStyle={styles.modalContainer} keyboardShouldPersistTaps="handled">
             <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
               <Text style={[styles.modalTitle, { color: colors.foreground }]}>
                 {editando?.id === "new" ? "Novo Móvel/Serviço" : "Editar Serviço"}

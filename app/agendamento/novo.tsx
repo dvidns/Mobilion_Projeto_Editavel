@@ -433,7 +433,7 @@ export default function NovoAgendamentoScreen() {
     }
     // step 2 = Serviço & Detalhes (merged)
     if (step === 2) {
-      if (!servicoSelecionado) { Alert.alert("Atenção", "Selecione o tipo de serviço."); return; }
+      if (!servicoSelecionado && moveis.length === 0) { Alert.alert("Atenção", "Selecione o tipo de serviço ou adicione pelo menos um serviço à lista."); return; }
       if (!data) { Alert.alert("Atenção", "Informe a data."); return; }
       const temItemAtual = !!servicoSelecionado && !!valor;
       if (moveis.length === 0 && !temItemAtual) { Alert.alert("Atenção", "Adicione pelo menos um móvel/serviço."); return; }

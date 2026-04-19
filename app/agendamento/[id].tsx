@@ -407,7 +407,7 @@ export default function AgendamentoDetalheScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* Data */}
           <View>
             <Text style={[styles.label, { color: colors.muted }]}>Data</Text>
@@ -827,7 +827,7 @@ export default function AgendamentoDetalheScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Status */}
         <TouchableOpacity
           style={[styles.statusRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
