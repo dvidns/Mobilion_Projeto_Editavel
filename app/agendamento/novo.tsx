@@ -142,6 +142,10 @@ export default function NovoAgendamentoScreen() {
   const [servicoCustomizado, setServicoCustomizado] = useState("");
   const [mostraInputCustomizado, setMostraInputCustomizado] = useState(false);
 
+  // Autocomplete state for service search
+  const [buscaServico, setBuscaServico] = useState("");
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+
   // Modal states
   const [modalCliente, setModalCliente] = useState(false);
   const [modalServico, setModalServico] = useState(false);
@@ -180,6 +184,13 @@ export default function NovoAgendamentoScreen() {
         )
       : contatosLista;
   }, [contatosBusca, contatosLista]);
+
+  // Autocomplete: filtrar serviços conforme digitação
+  const sugestoesServico = useMemo(() => {
+    if (!buscaServico.trim()) return servicos.slice(0, 8);
+    const q = buscaServico.toLowerCase();
+    return servicos.filter((s) => s.nome.toLowerCase().includes(q)).slice(0, 8);
+  }, [buscaServico, servicos]);
 
   // ── Abrir picker de contato único ─────────────────────────────────────────
   const abrirPickerContato = useCallback(async () => {
@@ -367,6 +378,7 @@ export default function NovoAgendamentoScreen() {
     };
     setMoveis(prev => [...prev, novoMovel]);
     setServicoSelecionado(null);
+    setBuscaServico("");
     setValor("");
     setQuantidadeMovel("1");
     setObservacaoMovel("");
@@ -383,7 +395,11 @@ export default function NovoAgendamentoScreen() {
         <View style={{ width: 26 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.form}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={() => setMostrarSugestoes(false)}
+      >
 
         {/* ── CLIENTE ─────────────────────────────────────────────────────── */}
         <Text style={[styles.label, { color: colors.muted }]}>Cliente *</Text>
@@ -455,17 +471,100 @@ export default function NovoAgendamentoScreen() {
         {/* ── SERVIÇO ─────────────────────────────────────────────────────── */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
           <Text style={[styles.label, { color: colors.muted }]}>Tipo de Serviço *</Text>
+          <TouchableOpacity onPress={() => setModalServico(true)} activeOpacity={0.8}>
+            <Text style={[{ color: colors.primary, fontSize: 12, fontWeight: "600" }]}>Ver todos</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.picker, { borderColor: colors.border, backgroundColor: colors.surface }]}
-          onPress={() => setModalServico(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.pickerText, { color: servicoSelecionado ? colors.foreground : colors.muted }]}>
-            {servicoSelecionado ? servicoSelecionado.nome : "Selecionar serviço..."}
-          </Text>
-          <MaterialIcons name="expand-more" size={22} color={colors.muted} />
-        </TouchableOpacity>
+
+        {/* Autocomplete input */}
+        <View style={{ position: "relative", zIndex: 10, marginBottom: mostrarSugestoes ? 0 : 12 }}>
+          <View style={[styles.picker, { borderColor: mostrarSugestoes ? colors.primary : colors.border, backgroundColor: colors.surface, marginBottom: 0 }]}>
+            <MaterialIcons name="search" size={18} color={colors.muted} style={{ marginRight: 6 }} />
+            <TextInput
+              style={[styles.pickerText, { color: colors.foreground, flex: 1, paddingVertical: 0 }]}
+              value={buscaServico}
+              onChangeText={(text) => {
+                setBuscaServico(text);
+                setMostrarSugestoes(true);
+                // Se o usuário apagou tudo, limpar seleção
+                if (!text.trim()) {
+                  setServicoSelecionado(null);
+                }
+              }}
+              onFocus={() => setMostrarSugestoes(true)}
+              placeholder="Digite para buscar móvel/serviço..."
+              placeholderTextColor={colors.muted}
+              returnKeyType="done"
+            />
+            {(buscaServico.length > 0 || servicoSelecionado) && (
+              <TouchableOpacity
+                onPress={() => {
+                  setBuscaServico("");
+                  setServicoSelecionado(null);
+                  setMostrarSugestoes(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="close" size={18} color={colors.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Dropdown de sugestões */}
+          {mostrarSugestoes && sugestoesServico.length > 0 && (
+            <View style={[styles.sugestoesBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {/* Opção: Novo serviço customizado */}
+              <TouchableOpacity
+                style={[styles.sugestaoItem, { borderBottomColor: colors.border, backgroundColor: colors.primary + "10" }]}
+                onPress={() => {
+                  setMostrarSugestoes(false);
+                  setMostraInputCustomizado(true);
+                  setModalServico(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons name="add-circle-outline" size={16} color={colors.primary} />
+                <Text style={[styles.sugestaoNome, { color: colors.primary }]}>+ Novo serviço customizado</Text>
+              </TouchableOpacity>
+              {sugestoesServico.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.sugestaoItem, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setServicoSelecionado(item);
+                    setBuscaServico(item.nome);
+                    setValor(String(item.valorSugerido));
+                    setMostrarSugestoes(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sugestaoNome, { color: colors.foreground }]}>{item.nome}</Text>
+                    <Text style={[styles.sugestaoSub, { color: colors.muted }]}>
+                      {item.categoria} · R$ {item.valorMin}–{item.valorMax}
+                    </Text>
+                  </View>
+                  <Text style={[{ color: colors.success, fontWeight: "700", fontSize: 13 }]}>
+                    R$ {item.valorSugerido}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Serviço selecionado via autocomplete */}
+        {servicoSelecionado && !mostrarSugestoes && (
+          <View style={[styles.servicoSelecionadoCard, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "40" }]}>
+            <MaterialIcons name="check-circle" size={16} color={colors.primary} />
+            <Text style={[{ flex: 1, color: colors.primary, fontSize: 13, fontWeight: "600" }]}>
+              {servicoSelecionado.nome}
+            </Text>
+            <Text style={[{ color: colors.muted, fontSize: 12 }]}>
+              Ref: R$ {servicoSelecionado.valorMin}–{servicoSelecionado.valorMax}
+            </Text>
+          </View>
+        )}
 
         {/* ── DATA ────────────────────────────────────────────────────────── */}
         <DatePicker
@@ -540,12 +639,6 @@ export default function NovoAgendamentoScreen() {
             <Text style={styles.addMovelActionText}>Adicionar à lista</Text>
           </TouchableOpacity>
         </View>
-
-        {servicoSelecionado && (
-          <Text style={[styles.hint, { color: colors.muted }]}>
-            Referência: R$ {servicoSelecionado.valorMin} – R$ {servicoSelecionado.valorMax}
-          </Text>
-        )}
 
         {/* ── LISTA DE MÓVEIS ADICIONAIS ──────────────────────────────────── */}
         {moveis.length > 0 && (
@@ -841,19 +934,21 @@ export default function NovoAgendamentoScreen() {
                   keyExtractor={(i) => i.id}
                   renderItem={({ item }) => (
                     <TouchableOpacity
-                      style={[styles.modalItem, { borderBottomColor: colors.border }]}
-                      onPress={() => {
-                        setServicoSelecionado(item);
-                        setValor(String(item.valorSugerido));
-                        setModalServico(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.modalItemText, { color: colors.foreground }]}>{item.nome}</Text>
-                      <Text style={[styles.modalItemSub, { color: colors.muted }]}>
-                        {item.categoria} · R$ {item.valorMin}–{item.valorMax}
-                      </Text>
-                    </TouchableOpacity>
+                  style={[styles.modalItem, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setServicoSelecionado(item);
+                    setBuscaServico(item.nome);
+                    setValor(String(item.valorSugerido));
+                    setModalServico(false);
+                    setMostrarSugestoes(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalItemText, { color: colors.foreground }]}>{item.nome}</Text>
+                  <Text style={[styles.modalItemSub, { color: colors.muted }]}>
+                    {item.categoria} · R$ {item.valorMin}–{item.valorMax}
+                  </Text>
+                </TouchableOpacity>
                   )}
                 />
               </>
@@ -881,7 +976,9 @@ export default function NovoAgendamentoScreen() {
                           valorSugerido: 0,
                         };
                         setServicoSelecionado(novoServico);
+                        setBuscaServico(novoServico.nome);
                         setValor(""); // Limpar valor para obrigar usuário a digitar
+                        setMostrarSugestoes(false);
                         setServicoCustomizado("");
                         setMostraInputCustomizado(false);
                         setModalServico(false);
@@ -1052,6 +1149,53 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     marginTop: 8,
+  },
+
+  // ── Autocomplete / Sugestões ─────────────────────────────────────────────
+  sugestoesBox: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    maxHeight: 260,
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    zIndex: 999,
+  },
+  sugestaoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  sugestaoNome: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  sugestaoSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  servicoSelecionadoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+    marginTop: -8,
   },
 
   movelItem: {
