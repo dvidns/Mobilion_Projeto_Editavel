@@ -1,4 +1,6 @@
 import * as XLSX from 'xlsx';
+import * as Print from 'expo-print';
+import { Platform } from 'react-native';
 import { getAgendamentos, type Agendamento } from './store';
 
 function formatMoney(v: number): string {
@@ -172,6 +174,11 @@ export async function gerarRelatorioPDF(dataInicio: string, dataFim: string): Pr
     </html>
   `;
 
+  if (Platform.OS !== 'web') {
+    const { uri } = await Print.printToFileAsync({ html, width: 794 });
+    return uri;
+  }
+
   return html;
 }
 
@@ -279,6 +286,11 @@ export async function gerarRelatorioAgendamentosPDF(dataInicio: string, dataFim:
       </body>
     </html>
   `;
+
+  if (Platform.OS !== 'web') {
+    const { uri } = await Print.printToFileAsync({ html, width: 794 });
+    return uri;
+  }
 
   return html;
 }
