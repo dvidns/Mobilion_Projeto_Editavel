@@ -134,21 +134,6 @@ export default function AjudaScreen() {
         <Text style={[styles.sectionTitle, { color: colors.muted }]}>FALAR COM SUPORTE</Text>
 
         <TouchableOpacity
-          style={[styles.contactCard, { backgroundColor: "#DCFCE7", borderColor: "#86EFAC" }]}
-          onPress={abrirWhatsApp}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.contactIcon, { backgroundColor: "#25D36620" }]}>
-            <MaterialIcons name="chat" size={26} color="#25D366" />
-          </View>
-          <View style={styles.contactInfo}>
-            <Text style={[styles.contactLabel, { color: "#166534" }]}>WhatsApp</Text>
-            <Text style={[styles.contactDesc, { color: "#16653480" }]}>Resposta em até 24h</Text>
-          </View>
-          <MaterialIcons name="chevron-right" size={22} color="#25D366" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={[styles.contactCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={abrirEmail}
           activeOpacity={0.8}
