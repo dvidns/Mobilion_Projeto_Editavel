@@ -15,7 +15,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
   addAgendamento, getClientes, addCliente, updateCliente, atualizarEnderecoCliente, getServicos, addServico,
-  type Cliente, type Servico,
+  getItensEstoque, getMargemPecas,
+  type Cliente, type Servico, type ItemEstoque,
 } from "@/lib/store";
 
 // Componente memoizado para item de contato
@@ -164,11 +165,18 @@ export default function NovoAgendamentoScreen() {
 
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(1);
-  const STEPS = ["Cliente", "Serviço", "Detalhes", "Confirmação"];
+  const STEPS = ["Cliente", "Serviço", "Peças", "Detalhes", "Confirmação"];
+
+  // Peças & Materiais
+  const [itensEstoque, setItensEstoque] = useState<ItemEstoque[]>([]);
+  const [margemPecas, setMargemPecas] = useState(30);
+  const [pecasSelecionadas, setPecasSelecionadas] = useState<{ id: string; nome: string; preco: number; qtd: number }[]>([]);
 
   useEffect(() => {
     getClientes().then(setClientes);
     getServicos().then(setServicos);
+    getItensEstoque().then(setItensEstoque);
+    getMargemPecas().then(setMargemPecas);
   }, []);
 
   // Memoizar cores para evitar re-renders
@@ -301,6 +309,19 @@ export default function NovoAgendamentoScreen() {
       }
     }
     
+    // Adicionar peças selecionadas como itens
+    for (const p of pecasSelecionadas) {
+      if (p.qtd > 0) {
+        moveisParaSalvar.push({
+          id: Math.random().toString(36).slice(2),
+          servicoId: p.id,
+          servicoNome: p.nome,
+          valor: String((p.preco * (1 + margemPecas / 100)).toFixed(2)),
+          quantidade: p.qtd,
+        });
+      }
+    }
+
     if (moveisParaSalvar.length === 0) { Alert.alert("Atenção", "Adicione pelo menos um móvel/serviço."); return; }
     if (!data) { Alert.alert("Atenção", "Informe a data."); return; }
     if (!hora) { Alert.alert("Atenção", "Informe a hora."); return; }
@@ -407,7 +428,7 @@ export default function NovoAgendamentoScreen() {
       if (!servicoSelecionado) { Alert.alert("Atenção", "Selecione o tipo de serviço."); return; }
       if (!data) { Alert.alert("Atenção", "Informe a data."); return; }
     }
-    if (step === 3) {
+    if (step === 4) {
       const temItemAtual = !!servicoSelecionado && !!valor;
       if (moveis.length === 0 && !temItemAtual) { Alert.alert("Atenção", "Adicione pelo menos um móvel/serviço."); return; }
       if (temRetorno && !dataRetorno) { Alert.alert("Atenção", "Informe a data do retorno."); return; }
@@ -426,7 +447,9 @@ export default function NovoAgendamentoScreen() {
       const qtd = Math.max(1, parseInt(quantidadeMovel, 10) || 1);
       lista = [...lista, { id: "_cur", servicoId: servicoSelecionado.id, servicoNome: servicoSelecionado.nome, valor, quantidade: qtd }];
     }
-    return lista.reduce((sum, m) => sum + parseFloat((m.valor || "0").replace(",", ".")) * m.quantidade, 0);
+    const totalMoveis = lista.reduce((sum, m) => sum + parseFloat((m.valor || "0").replace(",", ".")) * m.quantidade, 0);
+    const totalPecas = pecasSelecionadas.reduce((sum, p) => sum + p.preco * (1 + margemPecas / 100) * p.qtd, 0);
+    return totalMoveis + totalPecas;
   }
 
   // ── Stepper ─────────────────────────────────────────────────────────────
@@ -596,10 +619,109 @@ export default function NovoAgendamentoScreen() {
   }
 
   // ── Passo 3: Detalhes ────────────────────────────────────────────────────
+  // ── Passo 3: Peças & Materiais ────────────────────────────────────────
   function renderPasso3() {
+    const pecas = itensEstoque.filter((i) => i.categoria === "peca");
+    return (
+      <View style={styles.stepContent}>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Peças & Materiais</Text>
+        <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 12 }}>
+          Selecione as peças que serão utilizadas (opcional). Preço já inclui {margemPecas}% de margem.
+        </Text>
+        {pecas.length === 0 ? (
+          <View style={[styles.emptyClienteCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <MaterialIcons name="inventory-2" size={40} color={colors.muted} />
+            <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", marginTop: 6, lineHeight: 20 }}>
+              {"Nenhuma peça cadastrada.\nCadastre em Estoque & Materiais."}
+            </Text>
+          </View>
+        ) : (
+          pecas.map((item) => {
+            const sel = pecasSelecionadas.find((p) => p.id === item.id);
+            const precoVenda = item.precoUnitario * (1 + margemPecas / 100);
+            return (
+              <View
+                key={item.id}
+                style={[styles.movelItem, { backgroundColor: colors.surface, borderColor: sel ? colors.primary : colors.border, marginBottom: 8 }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.movelNome, { color: colors.foreground }]}>{item.nome}</Text>
+                  <View style={{ flexDirection: "row", gap: 6, marginTop: 3, alignItems: "center", flexWrap: "wrap" }}>
+                    <Text style={{ fontSize: 11, color: colors.muted }}>Custo: R$ {item.precoUnitario.toFixed(2)}</Text>
+                    <MaterialIcons name="arrow-forward" size={11} color={colors.muted} />
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: "#34A853" }}>R$ {precoVenda.toFixed(2)}</Text>
+                  </View>
+                  {item.estoque <= item.estoqueMinimo && (
+                    <Text style={{ fontSize: 11, color: "#CA8A04", marginTop: 2 }}>⚠ Estoque baixo ({item.estoque} un)</Text>
+                  )}
+                </View>
+                <View style={{ alignItems: "center" }}>
+                  {sel ? (
+                    <View style={{ alignItems: "center", gap: 4 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (sel.qtd <= 1) setPecasSelecionadas((prev) => prev.filter((p) => p.id !== item.id));
+                            else setPecasSelecionadas((prev) => prev.map((p) => p.id === item.id ? { ...p, qtd: p.qtd - 1 } : p));
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="remove-circle-outline" size={26} color={colors.primary} />
+                        </TouchableOpacity>
+                        <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 18, minWidth: 24, textAlign: "center" }}>{sel.qtd}</Text>
+                        <TouchableOpacity
+                          onPress={() => setPecasSelecionadas((prev) => prev.map((p) => p.id === item.id ? { ...p, qtd: p.qtd + 1 } : p))}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="add-circle-outline" size={26} color={colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={{ fontSize: 12, color: "#34A853", fontWeight: "600" }}>= R$ {(precoVenda * sel.qtd).toFixed(2)}</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => setPecasSelecionadas((prev) => [...prev, { id: item.id, nome: item.nome, preco: item.precoUnitario, qtd: 1 }])}
+                      activeOpacity={0.8}
+                      style={{ backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 }}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Adicionar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })
+        )}
+        {pecasSelecionadas.length > 0 && (
+          <View style={[styles.confirmaCard, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "40", marginTop: 12 }]}>
+            <Text style={[styles.confirmaSection, { color: colors.muted }]}>SUBTOTAL PEÇAS</Text>
+            {pecasSelecionadas.map((p) => {
+              const pm = p.preco * (1 + margemPecas / 100);
+              return (
+                <View key={p.id} style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 2 }}>
+                  <Text style={{ color: colors.foreground, fontSize: 13 }}>{p.nome} ×{p.qtd}</Text>
+                  <Text style={{ color: "#34A853", fontSize: 13, fontWeight: "600" }}>R$ {(pm * p.qtd).toFixed(2)}</Text>
+                </View>
+              );
+            })}
+            <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Text style={{ color: colors.primary, fontWeight: "700" }}>Total Peças</Text>
+              <Text style={{ color: colors.primary, fontWeight: "700" }}>
+                R$ {pecasSelecionadas.reduce((s, p) => s + p.preco * (1 + margemPecas / 100) * p.qtd, 0).toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // ── Passo 4: Detalhes ───────────────────────────────────────────────────
+  function renderPasso4() {
     return (
       <View style={[styles.stepContent, { zIndex: 1 }]}>
-        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 3: Detalhes</Text>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 4: Detalhes</Text>
         <Input label="Endereço / Bairro" value={endereco} onChangeText={setEndereco} placeholder="Rua, número, bairro..." />
         <Input label="Valor (R$) *" value={valor} onChangeText={setValor} placeholder="0,00" keyboardType="decimal-pad" />
         <Input label="Observação do Item" value={observacaoMovel} onChangeText={setObservacaoMovel} placeholder="Detalhe específico deste móvel/serviço" multiline numberOfLines={2} />
@@ -666,7 +788,7 @@ export default function NovoAgendamentoScreen() {
   }
 
   // ── Passo 4: Confirmação ─────────────────────────────────────────────────
-  function renderPasso4() {
+  function renderPasso5() {
     const total = calcTotal();
     const valorEntrada = temRetorno ? total / 2 : total;
     const valorRetornoVal = temRetorno ? total / 2 : 0;
@@ -677,7 +799,7 @@ export default function NovoAgendamentoScreen() {
     }
     return (
       <View style={styles.stepContent}>
-        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 4: Confirmação</Text>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 5: Confirmação</Text>
         <View style={[styles.confirmaCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.confirmaSection, { color: colors.muted }]}>CLIENTE</Text>
           <Text style={[styles.confirmaValue, { color: colors.foreground }]}>{clienteSelecionado?.nome}</Text>
@@ -717,6 +839,21 @@ export default function NovoAgendamentoScreen() {
               </View>
             );
           })}
+          {pecasSelecionadas.length > 0 && (
+            <>
+              <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
+              <Text style={[styles.confirmaSection, { color: colors.muted }]}>PEÇAS & MATERIAIS</Text>
+              {pecasSelecionadas.map((p) => {
+                const pm = p.preco * (1 + margemPecas / 100);
+                return (
+                  <View key={p.id} style={{ flexDirection: "row", justifyContent: "space-between", marginVertical: 2 }}>
+                    <Text style={[styles.confirmaSmall, { color: colors.foreground }]}>{p.nome} ×{p.qtd}</Text>
+                    <Text style={[styles.confirmaSmall, { color: "#34A853" }]}>R$ {(pm * p.qtd).toFixed(2)}</Text>
+                  </View>
+                );
+              })}
+            </>
+          )}
           <View style={[styles.confirmaDivider, { backgroundColor: colors.border }]} />
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={[styles.confirmaSection, { color: colors.muted }]}>VALOR TOTAL</Text>
@@ -775,6 +912,7 @@ export default function NovoAgendamentoScreen() {
         {step === 2 && renderPasso2()}
         {step === 3 && renderPasso3()}
         {step === 4 && renderPasso4()}
+        {step === 5 && renderPasso5()}
       </ScrollView>
 
       {/* Footer wizard */}
@@ -788,7 +926,7 @@ export default function NovoAgendamentoScreen() {
             {step === 1 ? "Cancelar" : "Voltar"}
           </Text>
         </TouchableOpacity>
-        {step < 4 ? (
+        {step < 5 ? (
           <TouchableOpacity
             style={[styles.wizardBtnProximo, { backgroundColor: colors.primary }]}
             onPress={avancar}
@@ -797,7 +935,7 @@ export default function NovoAgendamentoScreen() {
             <Text style={styles.wizardBtnProximoText}>Próximo</Text>
             <MaterialIcons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-        ) : (
+        {step === 5 ? (
           <TouchableOpacity
             style={[styles.wizardBtnProximo, { backgroundColor: saving ? colors.border : colors.primary }]}
             onPress={salvar}
@@ -813,7 +951,7 @@ export default function NovoAgendamentoScreen() {
               </>
             )}
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       {/* ══ MODAL: Contatos do celular ══════════════════════════════════════ */}
