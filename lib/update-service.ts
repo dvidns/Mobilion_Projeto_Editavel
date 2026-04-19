@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
-import * as Updates from "expo-updates";
 
 const UPDATE_AVAILABLE_KEY = "@montafacil:update_available";
 
@@ -15,25 +14,25 @@ export interface UpdateStatus {
   error?: string;
 }
 
-function getConfiguredApkUrl(): string | undefined {
-  const value = (Constants.expoConfig?.extra as { apkDownloadUrl?: string } | undefined)?.apkDownloadUrl;
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
+type ExtraConfig = {
+  githubBuildNumber?: string;
+  githubRepo?: string;
+};
 
 function getCurrentVersion(): string {
   return (Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "1.0.0") as string;
 }
 
-/**
- * Verifica se há update OTA disponível via expo-updates.
- * Em ambientes sem suporte (dev/Expo Go), retorna estado sem erro crítico.
- */
+function getExtra(): ExtraConfig {
+  return (Constants.expoConfig?.extra ?? {}) as ExtraConfig;
+}
+
 export async function checkForUpdates(): Promise<UpdateStatus> {
   const currentVersion = getCurrentVersion();
   const currentBuildVersion = String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 0);
-  const apkUrl = getConfiguredApkUrl();
+  const extra = getExtra();
+  const currentBuildNumber = Number(extra.githubBuildNumber ?? 0);
+  const githubRepo = extra.githubRepo ?? "dvidns/appmontafacil1";
 
   const baseStatus: UpdateStatus = {
     isAvailable: false,
@@ -41,57 +40,50 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     isReady: false,
     currentVersion,
     currentBuildVersion,
-    downloadUrl: apkUrl,
   };
 
   try {
-    if (__DEV__) {
-      return baseStatus;
-    }
+    const response = await fetch(
+      `https://api.github.com/repos/${githubRepo}/releases/latest`,
+      { headers: { Accept: "application/vnd.github+json" } }
+    );
 
-    const result = await Updates.checkForUpdateAsync();
-    const runtimeVersion = String(Updates.runtimeVersion ?? currentBuildVersion ?? currentVersion);
+    if (!response.ok) return baseStatus;
+
+    const release = await response.json();
+    const tagName: string = release.tag_name ?? "";
+    const latestBuildNumber = Number(tagName.replace("build-", "")) || 0;
+
+    const apkAsset = (release.assets as { name: string; browser_download_url: string }[] | undefined)
+      ?.find((a) => a.name.endsWith(".apk"));
+    const downloadUrl = apkAsset?.browser_download_url;
+
+    const isAvailable = latestBuildNumber > currentBuildNumber;
 
     const status: UpdateStatus = {
       ...baseStatus,
-      isAvailable: result.isAvailable,
-      newVersion: result.isAvailable ? runtimeVersion : undefined,
+      isAvailable,
+      newVersion: isAvailable ? tagName : undefined,
+      downloadUrl,
     };
 
     await AsyncStorage.setItem(UPDATE_AVAILABLE_KEY, JSON.stringify(status));
     return status;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : "Erro desconhecido";
-    return {
-      ...baseStatus,
-      error: errorMsg,
-    };
+    return { ...baseStatus, error: errorMsg };
   }
 }
 
-/**
- * Abre o link de download da atualização no navegador.
- */
 export async function downloadAndInstallUpdate(downloadUrl?: string): Promise<boolean> {
   try {
-    if (downloadUrl) {
+    const urlToOpen = downloadUrl ?? (await getStoredUpdateStatus())?.downloadUrl;
+    if (urlToOpen) {
       const { Linking } = await import("react-native");
-      await Linking.openURL(downloadUrl);
+      await Linking.openURL(urlToOpen);
       return true;
     }
-
-    if (__DEV__) {
-      return false;
-    }
-
-    const result = await Updates.checkForUpdateAsync();
-    if (result.isAvailable) {
-      await Updates.fetchUpdateAsync();
-      await Updates.reloadAsync();
-      return true;
-    }
-
-    return true;
+    return false;
   } catch {
     return false;
   }

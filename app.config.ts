@@ -93,6 +93,8 @@ const config: ExpoConfig = {
   },
   extra: {
     apkDownloadUrl: process.env.EXPO_PUBLIC_APK_URL ?? "http://192.168.1.8:8080/app-release.apk",
+    githubBuildNumber: process.env.EXPO_PUBLIC_BUILD_NUMBER ?? "0",
+    githubRepo: "dvidns/appmontafacil1",
     eas: {
       projectId: "232068b3-acba-4de1-b633-dd491f53b984",
     },

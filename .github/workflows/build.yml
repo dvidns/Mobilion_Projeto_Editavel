@@ -38,6 +38,8 @@ jobs:
 
       - name: Expo Prebuild (gerar pasta android)
         run: npx expo prebuild --platform android --no-install
+        env:
+          EXPO_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}
 
       - name: Build APK (assembleRelease)
         run: |
