@@ -67,15 +67,19 @@ export default function OrcamentosScreen() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  function openNew() {
-    setClienteSel(null);
-    setItens([]);
-    setObs("");
+  function resetServiceForm() {
     setServicoSelecionado(null);
     setBuscaServico("");
     setValorItem("");
     setQuantidadeItem("1");
     setMostrarSugestoes(false);
+  }
+
+  function openNew() {
+    setClienteSel(null);
+    setItens([]);
+    setObs("");
+    resetServiceForm();
     setShowModal(true);
   }
 
@@ -103,11 +107,7 @@ export default function OrcamentosScreen() {
         valor: val,
       }]);
     }
-    setServicoSelecionado(null);
-    setBuscaServico("");
-    setValorItem("");
-    setQuantidadeItem("1");
-    setMostrarSugestoes(false);
+    resetServiceForm();
   }
 
   function updateQuantidade(servicoId: string, delta: number) {
@@ -501,7 +501,7 @@ export default function OrcamentosScreen() {
                   onPress={() => {
                     if (servicoCustomizado.trim()) {
                       const novoServico = {
-                        id: "custom-" + Date.now(),
+                        id: "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2),
                         nome: servicoCustomizado.trim(),
                         categoria: "Customizado",
                         valorMin: 0,

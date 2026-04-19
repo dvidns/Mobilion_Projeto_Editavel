@@ -343,8 +343,9 @@ export default function NovoAgendamentoScreen() {
       });
 
       // Update the client's address if one was entered and the client doesn't have one yet
-      if (endereco.trim() && !clienteSelecionado.endereco) {
-        await updateCliente(clienteSelecionado.id, { endereco: endereco.trim() });
+      const enderecoTrimmed = endereco.trim();
+      if (enderecoTrimmed && !clienteSelecionado.endereco) {
+        await updateCliente(clienteSelecionado.id, { endereco: enderecoTrimmed });
       }
 
       router.back();
