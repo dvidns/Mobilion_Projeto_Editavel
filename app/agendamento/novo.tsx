@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
-  addAgendamento, getClientes, addCliente, getServicos, addServico,
+  addAgendamento, getClientes, addCliente, updateCliente, getServicos, addServico,
   type Cliente, type Servico,
 } from "@/lib/store";
 
@@ -341,6 +341,12 @@ export default function NovoAgendamentoScreen() {
         horaRetorno: temRetorno ? horaRetorno : undefined,
         enderecoRetorno: temRetorno ? enderecoRetorno : undefined,
       });
+
+      // Update the client's address if one was entered and the client doesn't have one yet
+      if (endereco.trim() && !clienteSelecionado.endereco) {
+        await updateCliente(clienteSelecionado.id, { endereco: endereco.trim() });
+      }
+
       router.back();
     } catch (error) {
       console.error("Erro ao salvar:", error);
