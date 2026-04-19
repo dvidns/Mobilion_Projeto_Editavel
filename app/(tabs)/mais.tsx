@@ -104,6 +104,23 @@ export default function MaisScreen() {
           </TouchableOpacity>
         ))}
 
+        <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 8 }]}>SUPORTE</Text>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => router.push("/ajuda" as any)}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: "#0EA5E918" }]}>
+            <MaterialIcons name="help-outline" size={26} color="#0EA5E9" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={[styles.menuLabel, { color: colors.foreground }]}>Ajuda e Suporte</Text>
+            <Text style={[styles.menuDesc, { color: colors.muted }]}>FAQ, contato e política de privacidade</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={colors.muted} />
+        </TouchableOpacity>
+
       </ScrollView>
     </ScreenContainer>
   );
