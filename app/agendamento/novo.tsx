@@ -165,7 +165,7 @@ export default function NovoAgendamentoScreen() {
 
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(1);
-  const STEPS = ["Cliente", "Serviço", "Peças", "Detalhes", "Confirmação"];
+  const STEPS = ["Cliente", "Serviço & Detalhes", "Peças", "Confirmação"];
 
   // Peças & Materiais
   const [itensEstoque, setItensEstoque] = useState<ItemEstoque[]>([]);
@@ -390,7 +390,7 @@ export default function NovoAgendamentoScreen() {
     } finally {
       setSaving(false);
     }
-  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, observacaoMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, router]);
+  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, observacaoMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, pecasSelecionadas, margemPecas, router]);
 
   // Callbacks para otimizar re-renders
   const handleUpdateQuantidade = useCallback((index: number, delta: number) => {
@@ -431,11 +431,10 @@ export default function NovoAgendamentoScreen() {
     if (step === 1) {
       if (!clienteSelecionado) { Alert.alert("Atenção", "Selecione um cliente para continuar."); return; }
     }
+    // step 2 = Serviço & Detalhes (merged)
     if (step === 2) {
       if (!servicoSelecionado) { Alert.alert("Atenção", "Selecione o tipo de serviço."); return; }
       if (!data) { Alert.alert("Atenção", "Informe a data."); return; }
-    }
-    if (step === 4) {
       const temItemAtual = !!servicoSelecionado && !!valor;
       if (moveis.length === 0 && !temItemAtual) { Alert.alert("Atenção", "Adicione pelo menos um móvel/serviço."); return; }
       if (temRetorno && !dataRetorno) { Alert.alert("Atenção", "Informe a data do retorno."); return; }
@@ -497,7 +496,7 @@ export default function NovoAgendamentoScreen() {
   function renderPasso1() {
     return (
       <View style={styles.stepContent}>
-        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 1: Cliente</Text>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Cliente</Text>
         <Text style={[styles.label, { color: colors.muted }]}>Selecione o cliente *</Text>
         <View style={styles.clienteOpcoes}>
           <TouchableOpacity
@@ -551,7 +550,7 @@ export default function NovoAgendamentoScreen() {
   function renderPasso2() {
     return (
       <View style={styles.stepContent}>
-        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 2: Serviço</Text>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Serviço & Detalhes</Text>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={[styles.label, { color: colors.muted }]}>Tipo de Serviço</Text>
           <TouchableOpacity onPress={() => setModalServico(true)} activeOpacity={0.8}>
@@ -621,11 +620,71 @@ export default function NovoAgendamentoScreen() {
           <Text style={[styles.pickerText, { color: colors.foreground }]}>{hora}</Text>
           <MaterialIcons name="expand-more" size={22} color={colors.muted} />
         </TouchableOpacity>
+        {/* ── Detalhes inline ── */}
+        <Input label="Endereço / Bairro" value={endereco} onChangeText={setEndereco} placeholder="Rua, número, bairro..." />
+        <Input label="Valor (R$) *" value={valor} onChangeText={setValor} placeholder="0,00" keyboardType="decimal-pad" />
+        <Input label="Observação do Item" value={observacaoMovel} onChangeText={setObservacaoMovel} placeholder="Detalhe específico deste móvel/serviço" multiline numberOfLines={2} />
+        <View style={styles.movelConfigRow}>
+          <View style={styles.movelQtdBox}>
+            <Text style={[styles.label, { color: colors.muted }]}>Quantidade</Text>
+            <TextInput
+              value={quantidadeMovel}
+              onChangeText={(t) => setQuantidadeMovel(t.replace(/\D/g, ""))}
+              keyboardType="number-pad"
+              style={[styles.input, styles.movelQtdInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+              placeholder="1"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+          <TouchableOpacity
+            style={[styles.addMovelActionBtn, { backgroundColor: servicoSelecionado && valor ? colors.primary : colors.border }]}
+            onPress={handleAddMovel}
+            activeOpacity={0.8}
+            disabled={!servicoSelecionado || !valor}
+          >
+            <MaterialIcons name="playlist-add" size={20} color="#fff" />
+            <Text style={styles.addMovelActionText}>Adicionar à lista</Text>
+          </TouchableOpacity>
+        </View>
+        {moveis.length > 0 && (
+          <View style={{ marginBottom: 12 }}>
+            <Text style={[styles.label, { color: colors.muted }]}>Itens adicionados</Text>
+            {moveis.map((m, idx) => (
+              <MovelItem key={m.id} movel={m} index={idx} colors={colors} onUpdateQuantidade={handleUpdateQuantidade} onRemove={handleRemoveMovel} />
+            ))}
+          </View>
+        )}
+        <Input label="Observações gerais" value={descricao} onChangeText={setDescricao} placeholder="Detalhes do serviço..." multiline numberOfLines={3} style={{ height: 80, textAlignVertical: "top" }} />
+        <View style={{ marginTop: 8 }}>
+          <TouchableOpacity onPress={() => setTemRetorno(!temRetorno)} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <View style={[styles.checkbox, { backgroundColor: temRetorno ? colors.primary : colors.surface, borderColor: colors.border }]}>
+              {temRetorno && <MaterialIcons name="check" size={16} color="#fff" />}
+            </View>
+            <Text style={[styles.label, { color: colors.foreground, marginBottom: 0 }]}>Agendar retorno para finalizar</Text>
+          </TouchableOpacity>
+          {temRetorno && (
+            <View style={{ gap: 12 }}>
+              <DatePicker label="Data do Retorno" value={dataRetorno} onChange={setDataRetorno} />
+              <TouchableOpacity
+                onPress={() => { setTimePickerMode("retorno"); setShowTimePicker(true); }}
+                style={[styles.dateInput, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              >
+                <MaterialIcons name="schedule" size={20} color={colors.primary} />
+                <Text style={[styles.dateInputText, { color: colors.foreground }]}>{horaRetorno || "Selecionar horário"}</Text>
+              </TouchableOpacity>
+              <TextInput
+                placeholder="Endereço do retorno (opcional)"
+                placeholderTextColor={colors.muted}
+                value={enderecoRetorno}
+                onChangeText={setEnderecoRetorno}
+                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
+              />
+            </View>
+          )}
+        </View>
       </View>
     );
   }
-
-  // ── Passo 3: Peças & Materiais ────────────────────────────────────────
   async function salvarNovaPeca() {
     const nomeT = novaPecaNome.trim();
     if (!nomeT) { Alert.alert("Atenção", "Informe o nome da peça."); return; }
@@ -756,75 +815,6 @@ export default function NovoAgendamentoScreen() {
     );
   }
 
-  // ── Passo 4: Detalhes ───────────────────────────────────────────────────
-  function renderPasso4() {
-    return (
-      <View style={[styles.stepContent, { zIndex: 1 }]}>
-        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 4: Detalhes</Text>
-        <Input label="Endereço / Bairro" value={endereco} onChangeText={setEndereco} placeholder="Rua, número, bairro..." />
-        <Input label="Valor (R$) *" value={valor} onChangeText={setValor} placeholder="0,00" keyboardType="decimal-pad" />
-        <Input label="Observação do Item" value={observacaoMovel} onChangeText={setObservacaoMovel} placeholder="Detalhe específico deste móvel/serviço" multiline numberOfLines={2} />
-        <View style={styles.movelConfigRow}>
-          <View style={styles.movelQtdBox}>
-            <Text style={[styles.label, { color: colors.muted }]}>Quantidade</Text>
-            <TextInput
-              value={quantidadeMovel}
-              onChangeText={(t) => setQuantidadeMovel(t.replace(/\D/g, ""))}
-              keyboardType="number-pad"
-              style={[styles.input, styles.movelQtdInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
-              placeholder="1"
-              placeholderTextColor={colors.muted}
-            />
-          </View>
-          <TouchableOpacity
-            style={[styles.addMovelActionBtn, { backgroundColor: servicoSelecionado && valor ? colors.primary : colors.border }]}
-            onPress={handleAddMovel}
-            activeOpacity={0.8}
-            disabled={!servicoSelecionado || !valor}
-          >
-            <MaterialIcons name="playlist-add" size={20} color="#fff" />
-            <Text style={styles.addMovelActionText}>Adicionar à lista</Text>
-          </TouchableOpacity>
-        </View>
-        {moveis.length > 0 && (
-          <View style={{ marginBottom: 12 }}>
-            <Text style={[styles.label, { color: colors.muted }]}>Itens adicionados</Text>
-            {moveis.map((m, idx) => (
-              <MovelItem key={m.id} movel={m} index={idx} colors={colors} onUpdateQuantidade={handleUpdateQuantidade} onRemove={handleRemoveMovel} />
-            ))}
-          </View>
-        )}
-        <Input label="Observações gerais" value={descricao} onChangeText={setDescricao} placeholder="Detalhes do serviço..." multiline numberOfLines={3} style={{ height: 80, textAlignVertical: "top" }} />
-        <View style={{ marginTop: 8 }}>
-          <TouchableOpacity onPress={() => setTemRetorno(!temRetorno)} activeOpacity={0.7} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-            <View style={[styles.checkbox, { backgroundColor: temRetorno ? colors.primary : colors.surface, borderColor: colors.border }]}>
-              {temRetorno && <MaterialIcons name="check" size={16} color="#fff" />}
-            </View>
-            <Text style={[styles.label, { color: colors.foreground, marginBottom: 0 }]}>Agendar retorno para finalizar</Text>
-          </TouchableOpacity>
-          {temRetorno && (
-            <View style={{ gap: 12 }}>
-              <DatePicker label="Data do Retorno" value={dataRetorno} onChange={setDataRetorno} />
-              <TouchableOpacity
-                onPress={() => { setTimePickerMode("retorno"); setShowTimePicker(true); }}
-                style={[styles.dateInput, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              >
-                <MaterialIcons name="schedule" size={20} color={colors.primary} />
-                <Text style={[styles.dateInputText, { color: colors.foreground }]}>{horaRetorno || "Selecionar horário"}</Text>
-              </TouchableOpacity>
-              <TextInput
-                placeholder="Endereço do retorno (opcional)"
-                placeholderTextColor={colors.muted}
-                value={enderecoRetorno}
-                onChangeText={setEnderecoRetorno}
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.foreground }]}
-              />
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }
 
   // ── Passo 4: Confirmação ─────────────────────────────────────────────────
   function renderPasso5() {
@@ -838,7 +828,7 @@ export default function NovoAgendamentoScreen() {
     }
     return (
       <View style={styles.stepContent}>
-        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Passo 5: Confirmação</Text>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>Confirmação</Text>
         <View style={[styles.confirmaCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.confirmaSection, { color: colors.muted }]}>CLIENTE</Text>
           <Text style={[styles.confirmaValue, { color: colors.foreground }]}>{clienteSelecionado?.nome}</Text>
@@ -950,8 +940,7 @@ export default function NovoAgendamentoScreen() {
         {step === 1 && renderPasso1()}
         {step === 2 && renderPasso2()}
         {step === 3 && renderPasso3()}
-        {step === 4 && renderPasso4()}
-        {step === 5 && renderPasso5()}
+        {step === 4 && renderPasso5()}
       </ScrollView>
 
       {/* Footer wizard */}
@@ -965,7 +954,7 @@ export default function NovoAgendamentoScreen() {
             {step === 1 ? "Cancelar" : "Voltar"}
           </Text>
         </TouchableOpacity>
-        {step < 5 ? (
+        {step < 4 ? (
           <TouchableOpacity
             style={[styles.wizardBtnProximo, { backgroundColor: colors.primary }]}
             onPress={avancar}

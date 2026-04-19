@@ -18,8 +18,8 @@ import { useColors } from "@/hooks/use-colors";
 import { useWhatsApp } from "@/hooks/use-whatsapp";
 import {
   getAgendamentos, updateAgendamento, deleteAgendamento, getClientes,
-  atualizarEnderecoCliente,
-  type Agendamento, type StatusAgendamento,
+  atualizarEnderecoCliente, getItensEstoque, getMargemPecas, addItemEstoque,
+  type Agendamento, type StatusAgendamento, type ItemEstoque,
 } from "@/lib/store";
 import { generateOrcamentoPDF, generateOrdemServiçoPDF, sharePDF } from "@/lib/pdf-service";
 
@@ -61,6 +61,16 @@ export default function AgendamentoDetalheScreen() {
   const [timePickerMode, setTimePickerMode] = useState<"hora" | "retorno">("hora");
   const orcamentoCaptureRef = useRef<View>(null);
 
+  // Peças & Materiais (edição)
+  const [itensEstoque, setItensEstoque] = useState<ItemEstoque[]>([]);
+  const [margemPecas, setMargemPecas] = useState(30);
+  const [pecasSelecionadas, setPecasSelecionadas] = useState<{ id: string; nome: string; preco: number; qtd: number }[]>([]);
+  const [modalNovaPeca, setModalNovaPeca] = useState(false);
+  const [novaPecaNome, setNovaPecaNome] = useState("");
+  const [novaPecaPreco, setNovaPecaPreco] = useState("");
+  const [novaPecaEstoque, setNovaPecaEstoque] = useState("1");
+  const [salvandoPeca, setSalvandoPeca] = useState(false);
+
   type MovelAgendamento = NonNullable<Agendamento["moveis"]>[number];
 
   useEffect(() => {
@@ -85,6 +95,13 @@ export default function AgendamentoDetalheScreen() {
       }
     });
   }, [isEditing, item, editData.endereco]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    getItensEstoque().then(setItensEstoque);
+    getMargemPecas().then(setMargemPecas);
+    setPecasSelecionadas([]);
+  }, [isEditing]);
 
   if (!item) return null;
 
@@ -198,10 +215,46 @@ export default function AgendamentoDetalheScreen() {
     enviarWhatsApp(item!.clienteTelefone, msg);
   }
 
+  async function salvarNovaPecaEdicao() {
+    const nomeT = novaPecaNome.trim();
+    if (!nomeT) { Alert.alert("Atenção", "Informe o nome da peça."); return; }
+    const precoN = parseFloat(novaPecaPreco.replace(",", "."));
+    if (isNaN(precoN) || precoN < 0) { Alert.alert("Atenção", "Informe um preço válido."); return; }
+    const estN = Math.max(0, parseInt(novaPecaEstoque, 10) || 0);
+    setSalvandoPeca(true);
+    try {
+      const novo = await addItemEstoque({ nome: nomeT, categoria: "peca", precoUnitario: precoN, estoque: estN, estoqueMinimo: 1 });
+      const novosItens = await getItensEstoque();
+      setItensEstoque(novosItens);
+      setPecasSelecionadas((prev) => [...prev, { id: novo.id, nome: novo.nome, preco: novo.precoUnitario, qtd: 1 }]);
+      setModalNovaPeca(false);
+      setNovaPecaNome(""); setNovaPecaPreco(""); setNovaPecaEstoque("1");
+    } catch {
+      Alert.alert("Erro", "Não foi possível cadastrar a peça.");
+    } finally {
+      setSalvandoPeca(false);
+    }
+  }
+
   async function salvarEdicoes() {
     try {
       const payload: Partial<Agendamento> = { ...editData };
-      const moveisAtualizados = getMoveisEdicao();
+      let moveisAtualizados = getMoveisEdicao();
+
+      // Adicionar peças selecionadas como itens
+      for (const p of pecasSelecionadas) {
+        if (p.qtd > 0) {
+          moveisAtualizados = [
+            ...moveisAtualizados,
+            {
+              id: Math.random().toString(36).slice(2),
+              servicoNome: p.nome,
+              valor: parseFloat((p.preco * (1 + margemPecas / 100)).toFixed(2)),
+              quantidade: p.qtd,
+            },
+          ];
+        }
+      }
 
       if (moveisAtualizados.length > 0) {
         const valorTotal = moveisAtualizados.reduce(
@@ -488,6 +541,85 @@ export default function AgendamentoDetalheScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Peças & Materiais */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 4 }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <Text style={[styles.cardTitle, { color: colors.muted }]}>PEÇAS & MATERIAIS</Text>
+              <TouchableOpacity
+                onPress={() => setModalNovaPeca(true)}
+                activeOpacity={0.8}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.primary + "15", borderColor: colors.primary + "50", borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16 }}
+              >
+                <MaterialIcons name="add" size={14} color={colors.primary} />
+                <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "700" }}>Nova peça</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8 }}>
+              Selecione as peças utilizadas (opcional). Preço inclui {margemPecas}% de margem.
+            </Text>
+            {itensEstoque.filter((i) => i.categoria === "peca").length === 0 ? (
+              <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", paddingVertical: 8 }}>
+                Nenhuma peça cadastrada.
+              </Text>
+            ) : (
+              itensEstoque.filter((i) => i.categoria === "peca").map((estItem) => {
+                const sel = pecasSelecionadas.find((p) => p.id === estItem.id);
+                const precoVenda = estItem.precoUnitario * (1 + margemPecas / 100);
+                return (
+                  <View
+                    key={estItem.id}
+                    style={[styles.movelItem, { borderColor: sel ? colors.primary : colors.border, marginBottom: 8 }]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.foreground }]}>{estItem.nome}</Text>
+                      <Text style={{ fontSize: 12, color: "#34A853", fontWeight: "600" }}>R$ {precoVenda.toFixed(2)}</Text>
+                    </View>
+                    <View style={{ alignItems: "center" }}>
+                      {sel ? (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              if (sel.qtd <= 1) setPecasSelecionadas((prev) => prev.filter((p) => p.id !== estItem.id));
+                              else setPecasSelecionadas((prev) => prev.map((p) => p.id === estItem.id ? { ...p, qtd: p.qtd - 1 } : p));
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="remove-circle-outline" size={24} color={colors.primary} />
+                          </TouchableOpacity>
+                          <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 16, minWidth: 20, textAlign: "center" }}>{sel.qtd}</Text>
+                          <TouchableOpacity
+                            onPress={() => setPecasSelecionadas((prev) => prev.map((p) => p.id === estItem.id ? { ...p, qtd: p.qtd + 1 } : p))}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialIcons name="add-circle-outline" size={24} color={colors.primary} />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => setPecasSelecionadas((prev) => [...prev, { id: estItem.id, nome: estItem.nome, preco: estItem.precoUnitario, qtd: 1 }])}
+                          activeOpacity={0.8}
+                          style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                        >
+                          <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Adicionar</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              })
+            )}
+            {pecasSelecionadas.length > 0 && (
+              <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ color: colors.primary, fontWeight: "700" }}>Total Peças</Text>
+                  <Text style={{ color: colors.primary, fontWeight: "700" }}>
+                    R$ {pecasSelecionadas.reduce((s, p) => s + p.preco * (1 + margemPecas / 100) * p.qtd, 0).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+
           {/* Endereço */}
           <View>
             <Text style={[styles.label, { color: colors.muted }]}>Endereço</Text>
@@ -615,6 +747,70 @@ export default function AgendamentoDetalheScreen() {
             }}
           />
         )}
+
+        {/* ── MODAL: Cadastrar Nova Peça (edição) ── */}
+        <Modal visible={modalNovaPeca} animationType="slide" transparent>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Nova Peça / Material</Text>
+                <TouchableOpacity onPress={() => setModalNovaPeca(false)}>
+                  <MaterialIcons name="close" size={24} color={colors.muted} />
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.label, { color: colors.muted }]}>Nome *</Text>
+              <TextInput
+                style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="Ex: Dobradiça, Parafuso, Trilho..."
+                placeholderTextColor={colors.muted}
+                value={novaPecaNome}
+                onChangeText={setNovaPecaNome}
+                autoFocus
+              />
+              <Text style={[styles.label, { color: colors.muted }]}>Preço de custo (R$) *</Text>
+              <TextInput
+                style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="Ex: 5,50"
+                placeholderTextColor={colors.muted}
+                value={novaPecaPreco}
+                onChangeText={setNovaPecaPreco}
+                keyboardType="decimal-pad"
+              />
+              {!!novaPecaPreco && !isNaN(parseFloat(novaPecaPreco.replace(",", "."))) && (
+                <Text style={{ color: "#34A853", fontSize: 12, marginBottom: 8, marginTop: -6 }}>
+                  Venda sugerida (+{margemPecas}%): R$ {(parseFloat(novaPecaPreco.replace(",", ".")) * (1 + margemPecas / 100)).toFixed(2)}
+                </Text>
+              )}
+              <Text style={[styles.label, { color: colors.muted }]}>Quantidade em estoque</Text>
+              <TextInput
+                style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="1"
+                placeholderTextColor={colors.muted}
+                value={novaPecaEstoque}
+                onChangeText={setNovaPecaEstoque}
+                keyboardType="number-pad"
+              />
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={[styles.contactBtn, { flex: 1, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                  onPress={() => setModalNovaPeca(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.contactBtnText, { color: colors.foreground }]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.contactBtn, { flex: 1, backgroundColor: salvandoPeca ? colors.border : colors.primary }]}
+                  onPress={salvarNovaPecaEdicao}
+                  disabled={salvandoPeca}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="check" size={16} color="#fff" />
+                  <Text style={[styles.contactBtnText, { color: "#fff" }]}>{salvandoPeca ? "Salvando..." : "Salvar"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ScreenContainer>
     );
   }
@@ -1191,6 +1387,11 @@ const styles = StyleSheet.create({
     padding: 24,
     width: "100%",
     gap: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   modalTitle: {
     fontSize: 17,
