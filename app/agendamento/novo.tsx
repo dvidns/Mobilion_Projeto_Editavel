@@ -935,7 +935,7 @@ export default function NovoAgendamentoScreen() {
             <Text style={styles.wizardBtnProximoText}>Próximo</Text>
             <MaterialIcons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-        {step === 5 ? (
+        ) : (
           <TouchableOpacity
             style={[styles.wizardBtnProximo, { backgroundColor: saving ? colors.border : colors.primary }]}
             onPress={salvar}
@@ -951,7 +951,7 @@ export default function NovoAgendamentoScreen() {
               </>
             )}
           </TouchableOpacity>
-        ) : null}
+        )}
       </View>
 
       {/* ══ MODAL: Contatos do celular ══════════════════════════════════════ */}
