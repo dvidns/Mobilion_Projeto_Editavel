@@ -9,7 +9,7 @@ import { useColors } from "@/hooks/use-colors";
 
 interface MultiPhotoPickerProps {
   fotos: string[];
-  onFotosChange: (fotos: string[]) => void;
+  onFotosChange?: (fotos: string[]) => void;
   label?: string;
   readonly?: boolean;
 }
@@ -39,10 +39,15 @@ export function MultiPhotoPicker({
       });
       if (!result.canceled && result.assets.length > 0) {
         const novasUris = result.assets.map((a) => a.uri);
-        onFotosChange([...fotos, ...novasUris]);
+        onFotosChange?.([...fotos, ...novasUris]);
       }
-    } catch {
-      Alert.alert("Erro", "Não foi possível selecionar a foto.");
+    } catch (err) {
+      const msg = (err as Error)?.message ?? "";
+      if (msg.toLowerCase().includes("permission")) {
+        Alert.alert("Permissão Negada", "Acesso à galeria foi negado.");
+      } else {
+        Alert.alert("Erro", "Não foi possível selecionar a foto. Tente novamente.");
+      }
     } finally {
       setLoading(false);
     }
@@ -62,10 +67,15 @@ export function MultiPhotoPicker({
         quality: 0.7,
       });
       if (!result.canceled && result.assets[0]) {
-        onFotosChange([...fotos, result.assets[0].uri]);
+        onFotosChange?.([...fotos, result.assets[0].uri]);
       }
-    } catch {
-      Alert.alert("Erro", "Não foi possível tirar a foto.");
+    } catch (err) {
+      const msg = (err as Error)?.message ?? "";
+      if (msg.toLowerCase().includes("permission")) {
+        Alert.alert("Permissão Negada", "Acesso à câmera foi negado.");
+      } else {
+        Alert.alert("Erro", "Não foi possível tirar a foto. Tente novamente.");
+      }
     } finally {
       setLoading(false);
     }
@@ -77,7 +87,7 @@ export function MultiPhotoPicker({
       {
         text: "Remover",
         style: "destructive",
-        onPress: () => onFotosChange(fotos.filter((_, i) => i !== index)),
+        onPress: () => onFotosChange?.(fotos.filter((_, i) => i !== index)),
       },
     ]);
   }

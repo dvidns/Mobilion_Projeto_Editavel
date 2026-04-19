@@ -723,7 +723,6 @@ export default function AgendamentoDetalheScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <MultiPhotoPicker
               fotos={item.fotos ?? []}
-              onFotosChange={() => {}}
               label="Fotos dos Móveis"
               readonly
             />
