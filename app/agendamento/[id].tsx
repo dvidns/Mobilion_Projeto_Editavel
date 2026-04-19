@@ -12,6 +12,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { PhotoPicker } from "@/components/ui/photo-picker";
+import { MultiPhotoPicker } from "@/components/ui/multi-photo-picker";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useWhatsApp } from "@/hooks/use-whatsapp";
@@ -568,6 +569,15 @@ export default function AgendamentoDetalheScreen() {
             )}
           </View>
 
+          {/* Fotos dos Móveis */}
+          <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border }}>
+            <MultiPhotoPicker
+              fotos={editData.fotos ?? item.fotos ?? []}
+              onFotosChange={(fotos) => setEditData((prev) => ({ ...prev, fotos }))}
+              label="Fotos dos Móveis"
+            />
+          </View>
+
           <Button title="Salvar Alterações" onPress={salvarEdicoes} />
         </ScrollView>
 
@@ -708,8 +718,16 @@ export default function AgendamentoDetalheScreen() {
           )}
         </View>
 
-        {/* Foto do Móvel */}
-        {/* Photo picker removed - not yet implemented */}
+        {/* Fotos dos Móveis */}
+        {(item.fotos?.length ?? 0) > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <MultiPhotoPicker
+              fotos={item.fotos ?? []}
+              label="Fotos dos Móveis"
+              readonly
+            />
+          </View>
+        )}
 
         {/* Cliente card */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
