@@ -369,9 +369,7 @@ export default function TabelaPrecosScreen() {
           </View>
 
           {/* Filtro categorias */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}
-          >
+          <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, gap: 6 }}>
             {CATEGORIAS_SVC.map((cat) => (
               <TouchableOpacity
                 key={cat}
@@ -384,7 +382,7 @@ export default function TabelaPrecosScreen() {
                 <Text style={[styles.catText, { color: catSvc === cat ? "#fff" : colors.muted }]}>{cat}</Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
 
           {/* Lista de serviços */}
           <FlatList
@@ -706,8 +704,8 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "flex-start",
     margin: 12, marginBottom: 4, padding: 10, borderRadius: 8, borderWidth: 1,
   },
-  catBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
-  catText: { fontSize: 13, fontWeight: "600" },
+  catBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
+  catText: { fontSize: 12, fontWeight: "600" },
   svcRow: {
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     padding: 12, borderRadius: 12, borderWidth: 1,
