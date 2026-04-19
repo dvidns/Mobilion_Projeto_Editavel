@@ -117,6 +117,8 @@ const KEYS = {
   lembrete: "@montafacil:lembrete_personalizado",
   itensEstoque: "@montafacil:itens_estoque",
   margemLucro: "@montafacil:margem_lucro",
+  margemMoveis: "@montafacil:margem_moveis",
+  margemPecas: "@montafacil:margem_pecas",
 };
 
 // ─── Preferência WhatsApp ─────────────────────────────────────────────────────
@@ -551,4 +553,26 @@ export async function getMargemLucro(): Promise<number> {
 
 export async function saveMargemLucro(margem: number): Promise<void> {
   await AsyncStorage.setItem(KEYS.margemLucro, String(margem));
+}
+
+// Margem separada por categoria
+export async function getMargemMoveis(): Promise<number> {
+  const raw = await AsyncStorage.getItem(KEYS.margemMoveis);
+  if (raw) return parseFloat(raw);
+  // fallback: herda margem geral se existir
+  return getMargemLucro();
+}
+
+export async function saveMargemMoveis(margem: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.margemMoveis, String(margem));
+}
+
+export async function getMargemPecas(): Promise<number> {
+  const raw = await AsyncStorage.getItem(KEYS.margemPecas);
+  if (raw) return parseFloat(raw);
+  return getMargemLucro();
+}
+
+export async function saveMargemPecas(margem: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.margemPecas, String(margem));
 }

@@ -10,7 +10,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import {
   getItensEstoque, addItemEstoque, updateItemEstoque, deleteItemEstoque,
-  getMargemLucro, saveMargemLucro,
+  getMargemMoveis, saveMargemMoveis, getMargemPecas, saveMargemPecas,
   type ItemEstoque, type CategoriaItem,
 } from "@/lib/store";
 
@@ -28,7 +28,11 @@ export default function TabelaPrecosScreen() {
 
   const [aba, setAba] = useState<Aba>("movel");
   const [itens, setItens] = useState<ItemEstoque[]>([]);
-  const [margem, setMargem] = useState(50);
+  const [margemMoveis, setMargemMoveis] = useState(50);
+  const [margemPecas, setMargemPecas] = useState(30);
+
+  // margem ativa com base na aba
+  const margem = aba === "movel" ? margemMoveis : margemPecas;
 
   // Modal de adição/edição
   const [modalVisible, setModalVisible] = useState(false);
@@ -43,12 +47,14 @@ export default function TabelaPrecosScreen() {
 
   // Modal de margem
   const [modalMargem, setModalMargem] = useState(false);
-  const [margemInput, setMargemInput] = useState("");
+  const [margemMovInput, setMargemMovInput] = useState("");
+  const [margemPecInput, setMargemPecInput] = useState("");
 
   const load = useCallback(async () => {
-    const [data, m] = await Promise.all([getItensEstoque(), getMargemLucro()]);
+    const [data, mm, mp] = await Promise.all([getItensEstoque(), getMargemMoveis(), getMargemPecas()]);
     setItens(data);
-    setMargem(m);
+    setMargemMoveis(mm);
+    setMargemPecas(mp);
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -116,10 +122,13 @@ export default function TabelaPrecosScreen() {
   }
 
   async function salvarMargem() {
-    const m = parseFloat(margemInput.replace(",", "."));
-    if (isNaN(m) || m < 0) { Alert.alert("Atenção", "Informe uma margem válida (ex: 50)."); return; }
-    await saveMargemLucro(m);
-    setMargem(m);
+    const mm = parseFloat(margemMovInput.replace(",", "."));
+    const mp = parseFloat(margemPecInput.replace(",", "."));
+    if (isNaN(mm) || mm < 0) { Alert.alert("Atenção", "Informe uma margem válida para Móveis."); return; }
+    if (isNaN(mp) || mp < 0) { Alert.alert("Atenção", "Informe uma margem válida para Peças."); return; }
+    await Promise.all([saveMargemMoveis(mm), saveMargemPecas(mp)]);
+    setMargemMoveis(mm);
+    setMargemPecas(mp);
     setModalMargem(false);
   }
 
@@ -150,8 +159,8 @@ export default function TabelaPrecosScreen() {
           </View>
           <MaterialIcons name="arrow-forward" size={14} color={colors.muted} style={{ marginTop: 14 }} />
           <View style={styles.cardPrecoCol}>
-            <Text style={[styles.cardPrecoLabel, { color: colors.muted }]}>Sugestão +{margem}%</Text>
-            <Text style={[styles.cardPreco, { color: "#34A853" }]}>{fmtMoney(item.precoUnitario * (1 + margem / 100))}</Text>
+            <Text style={[styles.cardPrecoLabel, { color: colors.muted }]}>Sugestão +{item.categoria === "movel" ? margemMoveis : margemPecas}%</Text>
+            <Text style={[styles.cardPreco, { color: "#34A853" }]}>{fmtMoney(item.precoUnitario * (1 + (item.categoria === "movel" ? margemMoveis : margemPecas) / 100))}</Text>
           </View>
         </View>
         <View style={styles.cardMid}>
@@ -219,11 +228,14 @@ export default function TabelaPrecosScreen() {
       {/* Banner de margem */}
       <TouchableOpacity
         style={styles.margemBanner}
-        onPress={() => { setMargemInput(String(margem)); setModalMargem(true); }}
+        onPress={() => { setMargemMovInput(String(margemMoveis)); setMargemPecInput(String(margemPecas)); setModalMargem(true); }}
         activeOpacity={0.85}
       >
         <MaterialIcons name="trending-up" size={18} color="#fff" />
-        <Text style={styles.margemBannerText}>  Margem de Lucro: Sugerido: {margem}%</Text>
+        <Text style={styles.margemBannerText}>
+          {"  "}Móveis: {margemMoveis}%{"  │  "}Peças: {margemPecas}%
+        </Text>
+        <MaterialIcons name="edit" size={15} color="rgba(255,255,255,0.8)" />
       </TouchableOpacity>
 
       {/* Botão adicionar */}
@@ -360,19 +372,41 @@ export default function TabelaPrecosScreen() {
         <View style={styles.overlay}>
           <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
             <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Margem de Lucro</Text>
-            <Text style={[styles.label, { color: colors.muted }]}>Percentual sugerido (%)</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 12 }}>
+              Defina margens separadas para cada categoria.
+            </Text>
+
+            <Text style={[styles.label, { color: colors.muted }]}>Móveis & Serviços (%)</Text>
             <TextInput
               style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
               placeholder="Ex: 50"
               placeholderTextColor={colors.muted}
-              value={margemInput}
-              onChangeText={setMargemInput}
+              value={margemMovInput}
+              onChangeText={setMargemMovInput}
               keyboardType="decimal-pad"
               autoFocus
             />
-            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 16 }}>
-              Com {margemInput || margem}% de margem, um item de R$ 100 será vendido por R$ {(100 * (1 + (parseFloat(margemInput || String(margem)) || 0) / 100)).toFixed(0)}.
-            </Text>
+            {!!margemMovInput && (
+              <Text style={{ color: "#34A853", fontSize: 12, marginBottom: 8 }}>
+                Item de R$ 100 → R$ {(100 * (1 + (parseFloat(margemMovInput.replace(",",".")) || 0) / 100)).toFixed(0)}
+              </Text>
+            )}
+
+            <Text style={[styles.label, { color: colors.muted }]}>Peças & Materiais (%)</Text>
+            <TextInput
+              style={[styles.input, { color: colors.foreground, backgroundColor: colors.background, borderColor: colors.border }]}
+              placeholder="Ex: 30"
+              placeholderTextColor={colors.muted}
+              value={margemPecInput}
+              onChangeText={setMargemPecInput}
+              keyboardType="decimal-pad"
+            />
+            {!!margemPecInput && (
+              <Text style={{ color: "#34A853", fontSize: 12, marginBottom: 8 }}>
+                Item de R$ 100 → R$ {(100 * (1 + (parseFloat(margemPecInput.replace(",",".")) || 0) / 100)).toFixed(0)}
+              </Text>
+            )}
+
             <View style={styles.sheetBtns}>
               <TouchableOpacity
                 style={[styles.sheetBtnCancel, { borderColor: colors.border }]}
