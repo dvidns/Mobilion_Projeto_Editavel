@@ -477,7 +477,7 @@ export default function NovoAgendamentoScreen() {
         </View>
 
         {/* Autocomplete input */}
-        <View style={{ position: "relative", zIndex: 10, marginBottom: mostrarSugestoes ? 0 : 12 }}>
+        <View style={{ position: "relative", zIndex: 10, marginBottom: 0 }}>
           <View style={[styles.picker, { borderColor: mostrarSugestoes ? colors.primary : colors.border, backgroundColor: colors.surface, marginBottom: 0 }]}>
             <MaterialIcons name="search" size={18} color={colors.muted} style={{ marginRight: 6 }} />
             <TextInput
@@ -495,6 +495,7 @@ export default function NovoAgendamentoScreen() {
               placeholder="Digite para buscar móvel/serviço..."
               placeholderTextColor={colors.muted}
               returnKeyType="done"
+              accessibilityLabel="Buscar serviço"
             />
             {(buscaServico.length > 0 || servicoSelecionado) && (
               <TouchableOpacity
@@ -544,7 +545,10 @@ export default function NovoAgendamentoScreen() {
                       {item.categoria} · R$ {item.valorMin}–{item.valorMax}
                     </Text>
                   </View>
-                  <Text style={[{ color: colors.success, fontWeight: "700", fontSize: 13 }]}>
+                  <Text
+                    style={[{ color: colors.success, fontWeight: "700", fontSize: 13 }]}
+                    accessibilityLabel={`Preço sugerido: R$ ${item.valorSugerido}`}
+                  >
                     R$ {item.valorSugerido}
                   </Text>
                 </TouchableOpacity>
@@ -1195,7 +1199,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     marginBottom: 12,
-    marginTop: -8,
+    marginTop: 4,
   },
 
   movelItem: {

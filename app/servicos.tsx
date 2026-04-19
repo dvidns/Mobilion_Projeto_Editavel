@@ -232,6 +232,8 @@ export default function ServicosScreen() {
         style={[styles.fabButton, { backgroundColor: colors.primary }]}
         onPress={abrirNovoServico}
         activeOpacity={0.85}
+        accessibilityLabel="Adicionar novo serviço"
+        accessibilityRole="button"
       >
         <MaterialIcons name="add" size={28} color="#fff" />
       </TouchableOpacity>
