@@ -18,6 +18,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useWhatsApp } from "@/hooks/use-whatsapp";
 import {
   getAgendamentos, updateAgendamento, deleteAgendamento, getClientes,
+  atualizarEnderecoCliente,
   type Agendamento, type StatusAgendamento,
 } from "@/lib/store";
 import { generateOrcamentoPDF, generateOrdemServiçoPDF, sharePDF } from "@/lib/pdf-service";
@@ -214,6 +215,13 @@ export default function AgendamentoDetalheScreen() {
       }
 
       await updateAgendamento(item!.id, payload);
+
+      // Atualizar endereço do cliente quando há endereço de retorno definido
+      const enderecoRetornoNovo = (payload.enderecoRetorno ?? item.enderecoRetorno ?? "").trim();
+      if (enderecoRetornoNovo && (payload.temRetorno ?? item.temRetorno)) {
+        await atualizarEnderecoCliente(item!.clienteId, enderecoRetornoNovo);
+      }
+
       setItem({ ...item!, ...payload });
       setIsEditing(false);
       Alert.alert("Sucesso", "Agendamento atualizado com sucesso!");

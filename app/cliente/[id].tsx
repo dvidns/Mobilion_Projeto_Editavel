@@ -88,6 +88,19 @@ export default function ClienteDetalheScreen() {
           {cliente.bairro && (
             <Text style={[styles.addr, { color: colors.muted }]}>📍 {cliente.bairro}</Text>
           )}
+          {cliente.endereco && (
+            <Text style={[styles.addr, { color: colors.muted }]}>🏠 {cliente.endereco}</Text>
+          )}
+          {(cliente.historicoEnderecos?.length ?? 0) > 0 && (
+            <View style={{ marginTop: 6, alignSelf: "stretch" }}>
+              <Text style={[styles.addr, { color: colors.muted, fontWeight: "600", marginBottom: 2 }]}>
+                Endereços anteriores:
+              </Text>
+              {cliente.historicoEnderecos!.map((end, idx) => (
+                <Text key={idx} style={[styles.addr, { color: colors.muted }]}>• {end}</Text>
+              ))}
+            </View>
+          )}
           {cliente.notas && (
             <Text style={[styles.notas, { color: colors.muted }]}>{cliente.notas}</Text>
           )}
