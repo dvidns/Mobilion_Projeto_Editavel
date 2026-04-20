@@ -286,7 +286,10 @@ export default function ConfiguracoesScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
-                    Build {updateStatus.newVersion} pronto para instalar.
+                    Versão atual: {updateStatus.currentVersion} (build {updateStatus.currentBuildVersion})
+                  </Text>
+                  <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
+                    Nova versão: {updateStatus.newVersion}
                   </Text>
                   <TouchableOpacity
                     style={[styles.downloadBtn, { backgroundColor: colors.primary }]}
@@ -313,6 +316,9 @@ export default function ConfiguracoesScreen() {
                     </Text>
                   </View>
                   <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
+                    Versão instalada: {updateStatus.currentVersion} (build {updateStatus.currentBuildVersion})
+                  </Text>
+                  <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
                     {updateStatus.error}
                   </Text>
                 </>
@@ -324,6 +330,14 @@ export default function ConfiguracoesScreen() {
                       Você já tem a versão mais recente
                     </Text>
                   </View>
+                  <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
+                    Versão instalada: {updateStatus.currentVersion} (build {updateStatus.currentBuildVersion})
+                  </Text>
+                  {!!updateStatus.latestVersion && (
+                    <Text style={[styles.updateResultDesc, { color: colors.muted }]}>
+                      Versão do GitHub: {updateStatus.latestVersion}
+                    </Text>
+                  )}
                   {!!updateStatus.downloadUrl && (
                     <TouchableOpacity
                       style={[styles.downloadBtn, { backgroundColor: colors.primary }]}
