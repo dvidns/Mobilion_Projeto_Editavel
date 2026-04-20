@@ -31,6 +31,9 @@ function getInstalledVersion(): string {
 }
 
 function getInstalledBuildVersion(): string {
+  const extra = (Constants.expoConfig?.extra ?? {}) as { githubBuildNumber?: string };
+  const githubBuildNumber = extra.githubBuildNumber;
+  if (githubBuildNumber && githubBuildNumber !== "0") return githubBuildNumber;
   return String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 1);
 }
 

@@ -30,9 +30,13 @@ function getExtra(): ExtraConfig {
 
 export async function checkForUpdates(): Promise<UpdateStatus> {
   const currentVersion = getCurrentVersion();
-  const currentBuildVersion = String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 0);
   const extra = getExtra();
-  const currentBuildNumber = Number(extra.githubBuildNumber ?? 0);
+  const githubBuildNumber = extra.githubBuildNumber;
+  const currentBuildVersion =
+    githubBuildNumber && githubBuildNumber !== "0"
+      ? githubBuildNumber
+      : String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 0);
+  const currentBuildNumber = Number(currentBuildVersion) || 0;
   const githubRepo = extra.githubRepo ?? "dvidns/appmontafacil1";
 
   const baseStatus: UpdateStatus = {
