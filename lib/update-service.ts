@@ -10,6 +10,7 @@ export interface UpdateStatus {
   currentVersion: string;
   currentBuildVersion: string;
   newVersion?: string;
+  latestVersion?: string;
   downloadUrl?: string;
   error?: string;
 }
@@ -64,6 +65,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
       ...baseStatus,
       isAvailable,
       newVersion: isAvailable ? tagName : undefined,
+      latestVersion: tagName ? tagName : undefined,
       downloadUrl,
     };
 
