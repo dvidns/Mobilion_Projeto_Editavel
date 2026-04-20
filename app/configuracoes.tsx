@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useColors } from "@/hooks/use-colors";
 import { getAvaliacaoLink, saveAvaliacaoLink, getLembretePersonalizado, saveLembretePersonalizado } from "@/lib/store";
-import { checkForUpdates, downloadAndInstallUpdate, type UpdateStatus } from "@/lib/update-service";
+import { checkForUpdates, downloadAndInstallUpdate, getInstalledBuildVersion, type UpdateStatus } from "@/lib/update-service";
 import {
   getBackupStatus, saveBackupLocally, exportBackupToShare, restoreFromFile,
   formatBackupTime, type BackupStatus,
@@ -28,10 +28,6 @@ interface Perfil {
 
 function getInstalledVersion(): string {
   return Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "1.0.0";
-}
-
-function getInstalledBuildVersion(): string {
-  return String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 1);
 }
 
 export default function ConfiguracoesScreen() {
