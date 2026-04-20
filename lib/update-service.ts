@@ -28,15 +28,18 @@ function getExtra(): ExtraConfig {
   return (Constants.expoConfig?.extra ?? {}) as ExtraConfig;
 }
 
-export async function checkForUpdates(): Promise<UpdateStatus> {
-  const currentVersion = getCurrentVersion();
+export function getInstalledBuildVersion(): string {
   const extra = getExtra();
   const githubBuildNumber = extra.githubBuildNumber;
-  const currentBuildVersion =
-    githubBuildNumber && githubBuildNumber !== "0"
-      ? githubBuildNumber
-      : String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 0);
+  if (githubBuildNumber && githubBuildNumber !== "0") return githubBuildNumber;
+  return String(Constants.nativeBuildVersion ?? Constants.expoConfig?.android?.versionCode ?? 0);
+}
+
+export async function checkForUpdates(): Promise<UpdateStatus> {
+  const currentVersion = getCurrentVersion();
+  const currentBuildVersion = getInstalledBuildVersion();
   const currentBuildNumber = Number(currentBuildVersion) || 0;
+  const extra = getExtra();
   const githubRepo = extra.githubRepo ?? "dvidns/appmontafacil1";
 
   const baseStatus: UpdateStatus = {
