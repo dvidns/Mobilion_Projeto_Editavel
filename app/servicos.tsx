@@ -3,11 +3,12 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { getServicos, updateServico, getValorHora, saveValorHora, type Servico } from "@/lib/store";
+import { sugerirValorServico, type SugestaoServico } from "@/lib/service-suggester";
 
 const CATEGORIAS = ["Todos", "Quarto", "Cozinha", "Sala", "Escritório", "Desmontagem", "Outros", "Customizado"];
 
@@ -27,6 +28,7 @@ export default function ServicosScreen() {
   const [novaCategoria, setNovaCategoria] = useState("Customizado");
   const [valorHora, setValorHora] = useState("0");
   const [mostraConfigValorHora, setMostraConfigValorHora] = useState(false);
+  const [sugestaoModalIA, setSugestaoModalIA] = useState<SugestaoServico | null>(null);
 
   const load = useCallback(async () => {
     const all = await getServicos();
@@ -36,6 +38,16 @@ export default function ServicosScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Compute suggestion when typing a new service name in the modal
+  useEffect(() => {
+    if (!editando || editando.id !== "new" || !novoNome.trim()) {
+      setSugestaoModalIA(null);
+      return;
+    }
+    const vh = parseFloat(valorHora) || 0;
+    setSugestaoModalIA(sugerirValorServico(novoNome, servicos, vh));
+  }, [novoNome, editando, servicos, valorHora]);
 
   const filtrados = categoria === "Todos"
     ? servicos
@@ -262,6 +274,29 @@ export default function ServicosScreen() {
                 placeholderTextColor={colors.muted}
                 autoFocus={editando?.id === "new"}
               />
+
+              {/* Sugestão de IA (somente para novo serviço) */}
+              {sugestaoModalIA && editando?.id === "new" && (
+                <View style={[styles.iaCard, { backgroundColor: colors.primary + "0D", borderColor: colors.primary + "40" }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <MaterialIcons name="auto-awesome" size={14} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}>Sugestão de Preço</Text>
+                  </View>
+                  <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 6, lineHeight: 15 }}>{sugestaoModalIA.razao}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Text style={{ color: colors.success, fontSize: 16, fontWeight: "800" }}>
+                      R$ {sugestaoModalIA.valor.toFixed(2)}
+                    </Text>
+                    <TouchableOpacity
+                      style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 7 }}
+                      onPress={() => setNovoValor(String(sugestaoModalIA.valor))}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Aceitar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               {/* Categoria */}
               <Text style={[styles.modalLabel, { color: colors.muted }]}>Categoria:</Text>
@@ -535,6 +570,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
+  },
+  iaCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 6,
+    marginBottom: 4,
   },
   calcBox: {
     borderWidth: 1,
