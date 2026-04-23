@@ -15,9 +15,10 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
   addAgendamento, getClientes, addCliente, updateCliente, atualizarEnderecoCliente, getServicos, addServico,
-  getItensEstoque, getMargemPecas, addItemEstoque,
+  getItensEstoque, getMargemPecas, addItemEstoque, getValorHora,
   type Cliente, type Servico, type ItemEstoque,
 } from "@/lib/store";
+import { analisarServico, type SugestaoServico } from "@/lib/service-suggester";
 
 // Componente memoizado para item de contato
 const ContatoItem = memo(({ item, clientes, colors, onPress }: {
@@ -167,6 +168,10 @@ export default function NovoAgendamentoScreen() {
   const [step, setStep] = useState(1);
   const STEPS = ["Cliente", "Serviço & Detalhes", "Peças", "Confirmação"];
 
+  // AI price suggestion
+  const [valorHora, setValorHora] = useState(0);
+  const [sugestaoIA, setSugestaoIA] = useState<SugestaoServico | null>(null);
+
   // Peças & Materiais
   const [itensEstoque, setItensEstoque] = useState<ItemEstoque[]>([]);
   const [margemPecas, setMargemPecas] = useState(30);
@@ -184,7 +189,17 @@ export default function NovoAgendamentoScreen() {
     getServicos().then(setServicos);
     getItensEstoque().then(setItensEstoque);
     getMargemPecas().then(setMargemPecas);
+    getValorHora().then(setValorHora);
   }, []);
+
+  // Compute AI suggestion whenever selected service changes
+  useEffect(() => {
+    if (!servicoSelecionado) {
+      setSugestaoIA(null);
+      return;
+    }
+    setSugestaoIA(analisarServico(servicoSelecionado, servicos, valorHora));
+  }, [servicoSelecionado, servicos, valorHora]);
 
   // Memoizar cores para evitar re-renders
   const colors = useColors();
@@ -633,6 +648,28 @@ export default function NovoAgendamentoScreen() {
             {servicoSelecionado.categoria !== "Customizado" && (
               <Text style={{ color: colors.muted, fontSize: 12 }}>Ref: R$ {servicoSelecionado.valorMin}–{servicoSelecionado.valorMax}</Text>
             )}
+          </View>
+        )}
+        {/* ── Sugestão de IA ── */}
+        {sugestaoIA && servicoSelecionado && !mostrarSugestoes && (
+          <View style={[styles.iaCard, { backgroundColor: colors.primary + "0D", borderColor: colors.primary + "40" }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+              <MaterialIcons name="auto-awesome" size={15} color={colors.primary} />
+              <Text style={{ color: colors.primary, fontSize: 13, fontWeight: "700" }}>Sugestão de Preço</Text>
+            </View>
+            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8, lineHeight: 16 }}>{sugestaoIA.razao}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ color: colors.success, fontSize: 19, fontWeight: "800" }}>
+                R$ {sugestaoIA.valor.toFixed(2)}
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 }}
+                onPress={() => setValor(String(sugestaoIA.valor))}
+                activeOpacity={0.8}
+              >
+                <Text style={{ color: "#fff", fontSize: 13, fontWeight: "700" }}>Aceitar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         <DatePicker label="Data *" value={data} onChange={setData} />
@@ -1469,6 +1506,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 12,
     marginTop: 4,
+  },
+  iaCard: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+    marginBottom: 12,
   },
 
   movelItem: {
