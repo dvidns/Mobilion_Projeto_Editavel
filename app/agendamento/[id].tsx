@@ -328,6 +328,18 @@ export default function AgendamentoDetalheScreen() {
         }];
   }
 
+  // Calcula o valor total real a partir dos móveis (ignora a divisão 50/50 do valor armazenado)
+  function calcularTotalOrcamento(currentItem: Agendamento): number {
+    if (currentItem.moveis && currentItem.moveis.length > 0) {
+      return currentItem.moveis.reduce(
+        (sum, m) => sum + (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
+        0
+      );
+    }
+    const base = Number(currentItem.valor) || 0;
+    return currentItem.temRetorno ? base * 2 : base;
+  }
+
   async function compartilharOrcamentoImagem() {
     if (Platform.OS === "web") {
       Alert.alert("Orçamento (IMG)", "No navegador, o compartilhamento de imagem não está disponível. Use o app Android para enviar a imagem direto no WhatsApp.");
@@ -373,7 +385,7 @@ export default function AgendamentoDetalheScreen() {
           hora: currentItem.hora,
           endereco: currentItem.endereco || "",
           servicos: montarServicosOrcamento(currentItem),
-          total: Number(currentItem.valor) || 0,
+          total: calcularTotalOrcamento(currentItem),
           descricao: currentItem.descricao,
         });
 
@@ -1079,7 +1091,7 @@ export default function AgendamentoDetalheScreen() {
           ))}
 
           <View style={styles.captureDivider} />
-          <Text style={styles.captureTotal}>{`Total: ${formatMoney(item.valor)}`}</Text>
+          <Text style={styles.captureTotal}>{`Total: ${formatMoney(calcularTotalOrcamento(item))}`}</Text>
           {!!item.descricao && <Text style={styles.captureObs}>{`Obs: ${item.descricao}`}</Text>}
         </View>
       </View>
