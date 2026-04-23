@@ -547,6 +547,21 @@ export default function NovoAgendamentoScreen() {
   }
 
   // ── Passo 2: Serviço ─────────────────────────────────────────────────────
+  function usarTextoComoServico(texto: string) {
+    if (!texto.trim()) return;
+    const novoServico = {
+      id: "custom-" + Date.now(),
+      nome: texto.trim(),
+      categoria: "Customizado",
+      valorMin: 0,
+      valorMax: 0,
+      valorSugerido: 0,
+    };
+    setServicoSelecionado(novoServico);
+    setBuscaServico(novoServico.nome);
+    setMostrarSugestoes(false);
+  }
+
   function renderPasso2() {
     return (
       <View style={styles.stepContent}>
@@ -565,7 +580,14 @@ export default function NovoAgendamentoScreen() {
               value={buscaServico}
               onChangeText={(text) => { setBuscaServico(text); setMostrarSugestoes(true); if (!text.trim()) setServicoSelecionado(null); }}
               onFocus={() => setMostrarSugestoes(true)}
-              placeholder="Selecione o serviço"
+              onSubmitEditing={() => {
+                if (buscaServico.trim() && !servicoSelecionado) {
+                  usarTextoComoServico(buscaServico);
+                } else {
+                  setMostrarSugestoes(false);
+                }
+              }}
+              placeholder="Digite ou selecione o serviço"
               placeholderTextColor={colors.muted}
               returnKeyType="done"
             />
@@ -575,16 +597,18 @@ export default function NovoAgendamentoScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {mostrarSugestoes && sugestoesServico.length > 0 && (
+          {mostrarSugestoes && (buscaServico.trim().length > 0 || sugestoesServico.length > 0) && (
             <View style={[styles.sugestoesBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <TouchableOpacity
-                style={[styles.sugestaoItem, { borderBottomColor: colors.border, backgroundColor: colors.primary + "10" }]}
-                onPress={() => { setMostrarSugestoes(false); setMostraInputCustomizado(true); setModalServico(true); }}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons name="add-circle-outline" size={16} color={colors.primary} />
-                <Text style={[styles.sugestaoNome, { color: colors.primary }]}>+ Novo serviço customizado</Text>
-              </TouchableOpacity>
+              {buscaServico.trim().length > 0 && !servicoSelecionado && (
+                <TouchableOpacity
+                  style={[styles.sugestaoItem, { borderBottomColor: colors.border, backgroundColor: colors.primary + "10" }]}
+                  onPress={() => usarTextoComoServico(buscaServico)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons name="add-circle-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.sugestaoNome, { color: colors.primary }]}>Usar "{buscaServico.trim()}" como serviço</Text>
+                </TouchableOpacity>
+              )}
               {sugestoesServico.map((item) => (
                 <TouchableOpacity
                   key={item.id}
@@ -606,7 +630,9 @@ export default function NovoAgendamentoScreen() {
           <View style={[styles.servicoSelecionadoCard, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "40", marginTop: 8 }]}>
             <MaterialIcons name="check-circle" size={16} color={colors.primary} />
             <Text style={{ flex: 1, color: colors.primary, fontSize: 13, fontWeight: "600" }}>{servicoSelecionado.nome}</Text>
-            <Text style={{ color: colors.muted, fontSize: 12 }}>Ref: R$ {servicoSelecionado.valorMin}–{servicoSelecionado.valorMax}</Text>
+            {servicoSelecionado.categoria !== "Customizado" && (
+              <Text style={{ color: colors.muted, fontSize: 12 }}>Ref: R$ {servicoSelecionado.valorMin}–{servicoSelecionado.valorMax}</Text>
+            )}
           </View>
         )}
         <DatePicker label="Data *" value={data} onChange={setData} />
