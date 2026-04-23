@@ -289,7 +289,7 @@ export default function ServicosScreen() {
                     </Text>
                     <TouchableOpacity
                       style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 7 }}
-                      onPress={() => setNovoValor(String(sugestaoModalIA.valor))}
+                      onPress={() => setNovoValor(sugestaoModalIA.valor.toFixed(2))}
                       activeOpacity={0.8}
                     >
                       <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Aceitar</Text>

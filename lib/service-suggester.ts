@@ -81,8 +81,8 @@ export function analisarServico(
   }
 
   // Custom service with no market data – try similar
-  const semElePropio = todos.filter((s) => s.id !== servico.id);
-  const sugestao = sugerirValorServico(nome, semElePropio, valorHora);
+  const semEleProprio = todos.filter((s) => s.id !== servico.id);
+  const sugestao = sugerirValorServico(nome, semEleProprio, valorHora);
   if (sugestao) return sugestao;
 
   if (valorSugerido > 0) {
