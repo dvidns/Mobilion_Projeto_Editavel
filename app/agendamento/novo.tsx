@@ -550,7 +550,7 @@ export default function NovoAgendamentoScreen() {
   function usarTextoComoServico(texto: string) {
     if (!texto.trim()) return;
     const novoServico = {
-      id: "custom-" + Date.now(),
+      id: "custom-" + Math.random().toString(36).slice(2),
       nome: texto.trim(),
       categoria: "Customizado",
       valorMin: 0,
