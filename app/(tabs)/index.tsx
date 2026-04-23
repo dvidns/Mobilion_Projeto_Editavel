@@ -23,21 +23,42 @@ function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function getValorExibicao(item: Pick<Agendamento, "valor" | "valorRecebido">) {
-  return item.valorRecebido ?? item.valor;
+type AgendamentoComRetorno = Agendamento & { isRetorno: boolean };
+
+function getValorExibicao(item: Pick<Agendamento, "valor" | "valorRecebido" | "temRetorno" | "moveis">) {
+  const valorBase = item.valorRecebido ?? item.valor;
+  if (!item.temRetorno) return valorBase;
+  const totalMoveis = (item.moveis ?? []).reduce(
+    (sum, m) => sum + (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
+    0
+  );
+  return totalMoveis > 0 ? totalMoveis / 2 : valorBase;
 }
 
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [agendamentos, setAgendamentos] = useState<AgendamentoComRetorno[]>([]);
   const today = new Date().toISOString().slice(0, 10);
 
   const load = useCallback(async () => {
     const all = await getAgendamentos();
     const todayItems = all
-      .filter((a) => a.data === today)
-      .sort((a, b) => a.hora.localeCompare(b.hora));
+      .flatMap((a): AgendamentoComRetorno[] => {
+        const items: AgendamentoComRetorno[] = [];
+        if (a.data === today) {
+          items.push({ ...a, isRetorno: false });
+        }
+        if (a.temRetorno && a.dataRetorno === today) {
+          items.push({ ...a, isRetorno: true });
+        }
+        return items;
+      })
+      .sort((a, b) => {
+        const horaA = a.isRetorno ? (a.horaRetorno || "00:00") : a.hora;
+        const horaB = b.isRetorno ? (b.horaRetorno || "00:00") : b.hora;
+        return horaA.localeCompare(horaB);
+      });
     setAgendamentos(todayItems);
   }, [today]);
 
@@ -45,7 +66,7 @@ export default function HomeScreen() {
 
   const total = agendamentos
     .filter((a) => a.status !== "cancelado")
-    .reduce((sum, a) => sum + (a.valorRecebido ?? a.valor), 0);
+    .reduce((sum, a) => sum + getValorExibicao(a), 0);
 
   const confirmados = agendamentos.filter((a) => a.status === "confirmado" || a.status === "concluido").length;
 
@@ -104,7 +125,6 @@ export default function HomeScreen() {
       {/* List */}
       <FlatList
         data={agendamentos}
-        keyExtractor={(i) => i.id}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -121,47 +141,55 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         }
-        renderItem={({ item }) => (
-          <Card onPress={() => router.push(`/agendamento/${item.id}` as any)}>
-            <View style={styles.cardRow}>
-              <View style={[styles.timeBox, { backgroundColor: colors.primary + "18" }]}>
-                <Text style={[styles.timeText, { color: colors.primary }]}>{item.hora}</Text>
-              </View>
-              <View style={styles.cardInfo}>
-                <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>
-                  {item.clienteNome}
-                </Text>
-                <Text style={[styles.cardService, { color: colors.muted }]} numberOfLines={1}>
-                  {item.tipoServico}
-                </Text>
-                {item.endereco ? (
-                  <Text style={[styles.cardAddr, { color: colors.muted }]} numberOfLines={1}>
-                    📍 {item.endereco}
+        keyExtractor={(i) => `${i.id}-${i.isRetorno ? "retorno" : "ag"}`}
+        renderItem={({ item }) => {
+          const hora = item.isRetorno ? (item.horaRetorno || "—") : item.hora;
+          const label = item.isRetorno ? `🔄 Retorno - ${item.tipoServico}` : item.tipoServico;
+          const endereco = item.isRetorno ? (item.enderecoRetorno || item.endereco) : item.endereco;
+          const bgColor = item.isRetorno ? colors.warning + "18" : colors.primary + "18";
+          const textColor = item.isRetorno ? colors.warning : colors.primary;
+          return (
+            <Card onPress={() => router.push(`/agendamento/${item.id}` as any)}>
+              <View style={styles.cardRow}>
+                <View style={[styles.timeBox, { backgroundColor: bgColor }]}>
+                  <Text style={[styles.timeText, { color: textColor }]}>{hora}</Text>
+                </View>
+                <View style={styles.cardInfo}>
+                  <Text style={[styles.cardName, { color: colors.foreground }]} numberOfLines={1}>
+                    {item.clienteNome}
                   </Text>
-                ) : null}
-              </View>
-              <View style={styles.cardRight}>
-                <Text style={[styles.cardValue, { color: colors.success }]}>
-                  {formatMoney(getValorExibicao(item))}
-                </Text>
-                <View style={styles.cardActions}>
-                  {item.endereco && (
-                    <TouchableOpacity
-                      onPress={() => {
-                        const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(item.endereco || '')}`;
-                        WebBrowser.openBrowserAsync(mapsUrl);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <MaterialIcons name="location-on" size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                  )}
-                  <StatusBadge status={item.status} />
+                  <Text style={[styles.cardService, { color: colors.muted }]} numberOfLines={1}>
+                    {label}
+                  </Text>
+                  {endereco ? (
+                    <Text style={[styles.cardAddr, { color: colors.muted }]} numberOfLines={1}>
+                      📍 {endereco}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.cardRight}>
+                  <Text style={[styles.cardValue, { color: colors.success }]}>
+                    {formatMoney(getValorExibicao(item))}
+                  </Text>
+                  <View style={styles.cardActions}>
+                    {endereco && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(endereco || "")}`;
+                          WebBrowser.openBrowserAsync(mapsUrl);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons name="location-on" size={20} color={colors.primary} />
+                      </TouchableOpacity>
+                    )}
+                    <StatusBadge status={item.status} />
+                  </View>
                 </View>
               </View>
-            </View>
-          </Card>
-        )}
+            </Card>
+          );
+        }}
       />
     </ScreenContainer>
   );
