@@ -119,6 +119,7 @@ const KEYS = {
   margemLucro: "@montafacil:margem_lucro",
   margemMoveis: "@montafacil:margem_moveis",
   margemPecas: "@montafacil:margem_pecas",
+  linkPagamento: "@montafacil:link_pagamento",
 };
 
 // ─── Preferência WhatsApp ─────────────────────────────────────────────────────
@@ -167,6 +168,15 @@ export async function getLembretePersonalizado(): Promise<string> {
 
 export async function saveLembretePersonalizado(lembrete: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.lembrete, lembrete);
+}
+
+export async function getLinkPagamento(): Promise<string> {
+  const raw = await AsyncStorage.getItem(KEYS.linkPagamento);
+  return raw ?? "";
+}
+
+export async function saveLinkPagamento(link: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.linkPagamento, link);
 }
 
 // ─── Default services (reference prices) ─────────────────────────────────────

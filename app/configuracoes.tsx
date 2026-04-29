@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Modal,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Modal, Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,7 +11,12 @@ import { ScreenContainer } from "@/components/screen-container";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useColors } from "@/hooks/use-colors";
-import { getAvaliacaoLink, saveAvaliacaoLink, getLembretePersonalizado, saveLembretePersonalizado } from "@/lib/store";
+import {
+  getAvaliacaoLink, saveAvaliacaoLink,
+  getLembretePersonalizado, saveLembretePersonalizado,
+  getWhatsAppTipo, saveWhatsAppTipo,
+  getLinkPagamento, saveLinkPagamento,
+} from "@/lib/store";
 import { checkForUpdates, downloadAndInstallUpdate, getInstalledBuildVersion, type UpdateStatus } from "@/lib/update-service";
 import {
   getBackupStatus, saveBackupLocally, exportBackupToShare, restoreFromFile,
@@ -38,6 +43,8 @@ export default function ConfiguracoesScreen() {
   const [cidade, setCidade] = useState("");
   const [avaliacaoLink, setAvaliacaoLink] = useState("");
   const [lembrete, setLembrete] = useState("");
+  const [whatsappBusiness, setWhatsappBusiness] = useState(false);
+  const [linkPagamento, setLinkPagamento] = useState("");
   const [saving, setSaving] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -83,7 +90,9 @@ export default function ConfiguracoesScreen() {
       AsyncStorage.getItem(KEY_PERFIL),
       getAvaliacaoLink(),
       getLembretePersonalizado(),
-    ]).then(([raw, link, lemb]) => {
+      getWhatsAppTipo(),
+      getLinkPagamento(),
+    ]).then(([raw, link, lemb, tipo, pix]) => {
       if (raw) {
         const p: Perfil = JSON.parse(raw);
         setNome(p.nome ?? "");
@@ -92,6 +101,8 @@ export default function ConfiguracoesScreen() {
       }
       setAvaliacaoLink(link);
       setLembrete(lemb);
+      setWhatsappBusiness(tipo === "business");
+      setLinkPagamento(pix ?? "");
     });
     getBackupStatus().then(setBackupStatus);
   }, []);
@@ -103,6 +114,8 @@ export default function ConfiguracoesScreen() {
         AsyncStorage.setItem(KEY_PERFIL, JSON.stringify({ nome, telefone, cidade })),
         saveAvaliacaoLink(avaliacaoLink),
         saveLembretePersonalizado(lembrete),
+        saveWhatsAppTipo(whatsappBusiness ? "business" : "normal"),
+        saveLinkPagamento(linkPagamento),
       ]);
       Alert.alert("Salvo!", "Suas informações foram atualizadas.");
     } catch {
@@ -230,6 +243,34 @@ export default function ConfiguracoesScreen() {
             placeholder="Olá {{cliente}}! Confirmando o serviço de {{servico}}..."
             multiline
           />
+        </View>
+
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.muted }]}>WHATSAPP</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "600" }}>Usar WhatsApp Business</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, lineHeight: 16 }}>
+                Ao enviar mensagens, abre o app WhatsApp Business (se instalado)
+              </Text>
+            </View>
+            <Switch
+              value={whatsappBusiness}
+              onValueChange={setWhatsappBusiness}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+          <Input
+            label="Chave PIX / Link de pagamento (opcional)"
+            value={linkPagamento}
+            onChangeText={setLinkPagamento}
+            placeholder="sua-chave@pix.com ou https://pagamento..."
+            keyboardType="url"
+          />
+          <Text style={[styles.sectionDesc, { color: colors.muted, marginTop: 4 }]}>
+            Se preenchido, será incluído automaticamente nas mensagens de lembrete enviadas ao cliente.
+          </Text>
         </View>
 
         <Button title="Salvar Tudo" onPress={salvar} loading={saving} />

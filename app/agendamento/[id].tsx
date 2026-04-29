@@ -202,7 +202,7 @@ export default function AgendamentoDetalheScreen() {
       const link = await getAvaliacaoLink();
       msg = `Olá ${item!.clienteNome}! 😊\n\nServiço de ${item!.tipoServico} concluído com sucesso!\n\nGostaríamos de sua avaliação:\n${link}\n\nObrigado pela confiança! 🙏`;
     } else {
-      const { getLembretePersonalizado } = await import("@/lib/store");
+      const { getLembretePersonalizado, getLinkPagamento } = await import("@/lib/store");
       let lembrete = await getLembretePersonalizado();
       lembrete = lembrete
         .replace("{cliente}", item!.clienteNome)
@@ -211,6 +211,10 @@ export default function AgendamentoDetalheScreen() {
         .replace("{hora}", item!.hora)
         .replace("{valor}", formatMoney(item!.valor));
       msg = lembrete;
+      const pixLink = await getLinkPagamento();
+      if (pixLink) {
+        msg += `\n\n💳 Pagamento:\n${pixLink}`;
+      }
     }
     enviarWhatsApp(item!.clienteTelefone, msg);
   }
