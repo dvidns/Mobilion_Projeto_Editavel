@@ -85,7 +85,7 @@ export default function CalendarioScreen() {
                 "Sucesso!",
                 `${count} agendamento(s) sincronizado(s) com o calendário.`
               );
-            } catch (err) {
+            } catch {
               Alert.alert("Erro", "Não foi possível sincronizar com o calendário.");
             } finally {
               setSyncing(false);

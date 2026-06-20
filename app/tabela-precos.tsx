@@ -110,6 +110,7 @@ export default function TabelaPrecosScreen() {
     const estN = parseInt(estoque, 10);
     if (isNaN(estN) || estN < 0) { Alert.alert("Atenção", "Informe uma quantidade válida."); return; }
     const estMinN = parseInt(estoqueMinimo, 10) || 0;
+    const categoriaEstoque: CategoriaItem = aba === "peca" ? "peca" : "movel";
 
     if (editItem) {
       await updateItemEstoque(editItem.id, {
@@ -117,7 +118,7 @@ export default function TabelaPrecosScreen() {
       });
     } else {
       await addItemEstoque({
-        nome: nomeT, categoria: aba, precoUnitario: precoN,
+        nome: nomeT, categoria: categoriaEstoque, precoUnitario: precoN,
         estoque: estN, estoqueMinimo: estMinN,
       });
     }

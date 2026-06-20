@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, Alert,
+  View, Text, FlatList, TouchableOpacity, StyleSheet,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -11,8 +11,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useColors } from "@/hooks/use-colors";
 import * as WebBrowser from "expo-web-browser";
 import {
-  getAgendamentos, updateAgendamento,
-  type Agendamento, type StatusAgendamento,
+  getAgendamentos,
+  type Agendamento,
 } from "@/lib/store";
 
 function formatDate(date: Date) {
@@ -69,25 +69,6 @@ export default function HomeScreen() {
     .reduce((sum, a) => sum + getValorExibicao(a), 0);
 
   const confirmados = agendamentos.filter((a) => a.status === "confirmado" || a.status === "concluido").length;
-
-  function handleStatusChange(item: Agendamento) {
-    const opcoes: { label: string; value: StatusAgendamento }[] = [
-      { label: "Pendente", value: "pendente" },
-      { label: "Confirmado", value: "confirmado" },
-      { label: "Concluído", value: "concluido" },
-      { label: "Cancelado", value: "cancelado" },
-    ];
-    Alert.alert("Alterar status", item.clienteNome, [
-      ...opcoes.map((o) => ({
-        text: o.label,
-        onPress: async () => {
-          await updateAgendamento(item.id, { status: o.value });
-          load();
-        },
-      })),
-      { text: "Cancelar", style: "cancel" },
-    ]);
-  }
 
   return (
     <ScreenContainer>

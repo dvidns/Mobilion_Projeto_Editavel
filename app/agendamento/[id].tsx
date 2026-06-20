@@ -1,5 +1,5 @@
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, TextInput, Switch, Modal, Platform,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking, TextInput, Modal, Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -11,7 +11,6 @@ import { captureRef } from "react-native-view-shot";
 import { ScreenContainer } from "@/components/screen-container";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
-import { PhotoPicker } from "@/components/ui/photo-picker";
 import { MultiPhotoPicker } from "@/components/ui/multi-photo-picker";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
@@ -21,7 +20,7 @@ import {
   atualizarEnderecoCliente, getItensEstoque, getMargemPecas, addItemEstoque,
   type Agendamento, type StatusAgendamento, type ItemEstoque,
 } from "@/lib/store";
-import { generateOrcamentoPDF, generateOrdemServiçoPDF, sharePDF } from "@/lib/pdf-service";
+import { generateOrcamentoPDF, sharePDF } from "@/lib/pdf-service";
 
 function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -242,6 +241,12 @@ export default function AgendamentoDetalheScreen() {
 
   async function salvarEdicoes() {
     try {
+      const currentItem = item;
+      if (!currentItem) {
+        Alert.alert("Erro", "Agendamento não encontrado.");
+        return;
+      }
+
       const payload: Partial<Agendamento> = { ...editData };
       let moveisAtualizados = getMoveisEdicao();
 
@@ -265,24 +270,24 @@ export default function AgendamentoDetalheScreen() {
           (sum, m) => sum + (Number(m.valor) || 0) * (Number(m.quantidade) || 1),
           0
         );
-        const temRetornoAtivo = payload.temRetorno ?? item.temRetorno;
+        const temRetornoAtivo = payload.temRetorno ?? currentItem.temRetorno;
         payload.moveis = moveisAtualizados;
         payload.valor = temRetornoAtivo ? valorTotal / 2 : valorTotal;
         payload.tipoServico = moveisAtualizados[0].servicoNome;
       }
 
-      await updateAgendamento(item!.id, payload);
+      await updateAgendamento(currentItem.id, payload);
 
       // Atualizar endereço do cliente quando há endereço de retorno definido
-      const enderecoRetornoNovo = (payload.enderecoRetorno ?? item.enderecoRetorno ?? "").trim();
-      if (enderecoRetornoNovo && (payload.temRetorno ?? item.temRetorno)) {
-        await atualizarEnderecoCliente(item!.clienteId, enderecoRetornoNovo);
+      const enderecoRetornoNovo = (payload.enderecoRetorno ?? currentItem.enderecoRetorno ?? "").trim();
+      if (enderecoRetornoNovo && (payload.temRetorno ?? currentItem.temRetorno)) {
+        await atualizarEnderecoCliente(currentItem.clienteId, enderecoRetornoNovo);
       }
 
-      setItem({ ...item!, ...payload });
+      setItem({ ...currentItem, ...payload });
       setIsEditing(false);
       Alert.alert("Sucesso", "Agendamento atualizado com sucesso!");
-    } catch (err) {
+    } catch {
       Alert.alert("Erro", "Falha ao atualizar agendamento");
     }
   }
@@ -395,7 +400,7 @@ export default function AgendamentoDetalheScreen() {
 
         await sharePDF(filePath, `orcamento_${currentItem.clienteNome}`);
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Erro", "Não foi possível gerar o orçamento.");
     } finally {
       setGeneratingPDF(false);

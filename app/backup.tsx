@@ -93,7 +93,7 @@ export default function BackupScreen() {
               <Text style={{ color: "#fff", fontWeight: "700" }}>1</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.instructionTitle, { color: colors.foreground }]}>Clique em "Exportar Backup"</Text>
+              <Text style={[styles.instructionTitle, { color: colors.foreground }]}>Clique em Exportar Backup</Text>
               <Text style={[styles.instructionDesc, { color: colors.muted }]}>
                 Um arquivo JSON será criado com todos os seus dados
               </Text>

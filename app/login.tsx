@@ -1,13 +1,9 @@
 import { ScreenContainer } from "@/components/screen-container";
-import * as Api from "@/lib/_core/api";
-import * as Auth from "@/lib/_core/auth";
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useColors } from "@/hooks/use-colors";
 
 export default function LoginScreen() {
-  const router = useRouter();
   const colors = useColors();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView, Linking,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";

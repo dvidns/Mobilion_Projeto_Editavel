@@ -10,7 +10,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
@@ -54,6 +53,7 @@ const ContatoItem = memo(({ item, clientes, colors, onPress }: {
     </TouchableOpacity>
   );
 });
+ContatoItem.displayName = "ContatoItem";
 
 // Tipo para item de móvel/serviço no agendamento
 interface ItemMovel {
@@ -120,6 +120,7 @@ const MovelItem = memo(({ movel, index, colors, onUpdateQuantidade, onRemove }: 
     </View>
   );
 });
+MovelItem.displayName = "MovelItem";
 
 export default function NovoAgendamentoScreen() {
   const router = useRouter();
@@ -151,11 +152,7 @@ export default function NovoAgendamentoScreen() {
   // Modal states
   const [modalCliente, setModalCliente] = useState(false);
   const [modalServico, setModalServico] = useState(false);
-  const [modalHora, setModalHora] = useState(false);
   const [modalContatos, setModalContatos] = useState(false);
-  const [horaCustomizada, setHoraCustomizada] = useState("");
-  const [mostraInputHora, setMostraInputHora] = useState(false);
-  const [modalRetorno, setModalRetorno] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [timePickerMode, setTimePickerMode] = useState<"hora" | "retorno">("hora");
 
@@ -360,8 +357,6 @@ export default function NovoAgendamentoScreen() {
 
     // Dividir 50/50 se houver retorno
     const valorAgendamento = temRetorno ? valorTotal / 2 : valorTotal;
-    const valorRetorno = temRetorno ? valorTotal / 2 : 0;
-
     setSaving(true);
     try {
       // Se for serviço customizado, registrar na tabela de preços
@@ -405,7 +400,7 @@ export default function NovoAgendamentoScreen() {
     } finally {
       setSaving(false);
     }
-  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, observacaoMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, pecasSelecionadas, margemPecas, router]);
+  }, [clienteSelecionado, moveis, servicoSelecionado, valor, quantidadeMovel, observacaoMovel, data, hora, descricao, endereco, temRetorno, dataRetorno, horaRetorno, enderecoRetorno, pecasSelecionadas, margemPecas, router, registrarNovoServico]);
 
   // Callbacks para otimizar re-renders
   const handleUpdateQuantidade = useCallback((index: number, delta: number) => {
@@ -621,7 +616,7 @@ export default function NovoAgendamentoScreen() {
                   activeOpacity={0.7}
                 >
                   <MaterialIcons name="add-circle-outline" size={16} color={colors.primary} />
-                  <Text style={[styles.sugestaoNome, { color: colors.primary }]}>Usar "{buscaServico.trim()}" como serviço</Text>
+                  <Text style={[styles.sugestaoNome, { color: colors.primary }]}>Usar {buscaServico.trim()} como serviço</Text>
                 </TouchableOpacity>
               )}
               {sugestoesServico.map((item) => (
@@ -1210,7 +1205,7 @@ export default function NovoAgendamentoScreen() {
                 <View style={styles.emptyContatos}>
                   <MaterialIcons name="people-outline" size={40} color={colors.border} />
                   <Text style={[styles.emptyContatosText, { color: colors.muted }]}>
-                    Nenhum cliente cadastrado.{"\n"}Use "Buscar no celular" acima.
+                    Nenhum cliente cadastrado.{"\n"}Use Buscar no celular acima.
                   </Text>
                 </View>
               }

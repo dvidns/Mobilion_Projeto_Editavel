@@ -1,6 +1,7 @@
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Alert,
 } from "react-native";
+import React from "react";
 import { useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import Constants from "expo-constants";
@@ -55,7 +56,6 @@ const FAQ: { q: string; a: string }[] = [
 
 // ─── Contato ─────────────────────────────────────────────────────────────────
 
-const SUPORTE_WHATSAPP = "5500000000000"; // Substituir pelo número real
 const SUPORTE_EMAIL = "contato@montafacil.app";
 const PRIVACIDADE_URL = "https://dvidns.github.io/appmontafacil1/";
 
@@ -90,20 +90,11 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
-import React from "react";
-
 // ─── Tela principal ───────────────────────────────────────────────────────────
 
 export default function AjudaScreen() {
   const colors = useColors();
   const router = useRouter();
-
-  function abrirWhatsApp() {
-    const msg = encodeURIComponent("Olá! Preciso de ajuda com o MontaFácil.");
-    Linking.openURL(`https://wa.me/${SUPORTE_WHATSAPP}?text=${msg}`).catch(() =>
-      Alert.alert("Erro", "Não foi possível abrir o WhatsApp.")
-    );
-  }
 
   function abrirEmail() {
     Linking.openURL(

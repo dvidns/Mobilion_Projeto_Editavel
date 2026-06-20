@@ -86,7 +86,7 @@ export default function ClientesScreen() {
           },
         ]
       );
-    } catch (e) {
+    } catch {
       Alert.alert("Erro", "Não foi possível acessar os contatos.");
     } finally {
       setImportando(false);

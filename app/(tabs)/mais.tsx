@@ -33,6 +33,13 @@ const MENU_ITEMS: MenuItem[] = [
     color: "#EA4335",
   },
   {
+    icon: "summarize",
+    label: "Relatórios Fiscais IR",
+    desc: "Totais PF/PJ e exportação CSV para contabilidade",
+    route: "/relatorios-fiscais",
+    color: "#0EA5E9",
+  },
+  {
     icon: "request-quote",
     label: "Orçamentos",
     desc: "Crie e envie orçamentos pelo WhatsApp",

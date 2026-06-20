@@ -112,7 +112,7 @@ export default function ServicosScreen() {
       try {
         const { addServico } = await import("@/lib/store");
         await addServico(novoServico);
-      } catch (e) {
+      } catch {
         console.log("Serviço adicionado localmente");
       }
       Alert.alert("Sucesso", "Novo serviço adicionado!");

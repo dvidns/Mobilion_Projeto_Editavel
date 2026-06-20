@@ -1,5 +1,5 @@
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Modal,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -13,18 +13,8 @@ import { useColors } from "@/hooks/use-colors";
 import { getAgendamentos, type Agendamento } from "@/lib/store";
 import { gerarRelatorioExcel, gerarRelatorioPDF, gerarRelatorioCSV } from "@/lib/report-service";
 
-const screenWidth = Dimensions.get("window").width;
-
 function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function formatDate(iso: string) {
-  return new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 }
 
 interface MesData {

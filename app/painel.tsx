@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { useState, useCallback } from "react";
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
@@ -201,7 +201,7 @@ export default function PainelScreen() {
         <View style={styles.legendSection}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>LEGENDA DE STATUS</Text>
           <View style={styles.legendGrid}>
-            {(Object.entries(STATUS_COLORS) as Array<[StatusAgendamento, typeof STATUS_COLORS.pendente]>).map(
+            {(Object.entries(STATUS_COLORS) as [StatusAgendamento, typeof STATUS_COLORS.pendente][]).map(
               ([status, color]) => (
                 <View key={status} style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: color.bg, borderColor: color.text, borderWidth: 1.5 }]}>
