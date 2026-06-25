@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -9,16 +10,17 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import * as ImagePicker from "expo-image-picker";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { getClientes, type Cliente } from "@/lib/store";
-import { processarDespesaComImagem } from "@/lib/despesas-api";
+import { confirmarDespesaProcessada } from "@/lib/despesas-api";
 import type { TipoPessoa } from "@/shared/despesas";
 
 export default function NovaDespesaScreen() {
@@ -30,74 +32,65 @@ export default function NovaDespesaScreen() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [modalCliente, setModalCliente] = useState(false);
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [imageMimeType, setImageMimeType] = useState<string | undefined>(undefined);
+  const [fornecedorNome, setFornecedorNome] = useState("");
+  const [fornecedorCnpj, setFornecedorCnpj] = useState("");
+  const [dataEmissao, setDataEmissao] = useState("");
+  const [valorTotal, setValorTotal] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     getClientes().then(setClientes);
   }, []);
 
-  async function tirarFoto() {
-    const permissao = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permissao.granted) {
-      Alert.alert("Permissão necessária", "Permita acesso à câmera para capturar o recibo.");
+  const valorNumerico = useMemo(() => {
+    const bruto = valorTotal.trim();
+    if (!bruto) return 0;
+
+    // Aceita formatos como 10, 10.00 e 10,00.
+    const temVirgula = bruto.includes(",");
+    const normalizado = temVirgula
+      ? bruto.replace(/\./g, "").replace(",", ".")
+      : bruto;
+
+    const parsed = Number(normalizado);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [valorTotal]);
+
+  async function salvarManual() {
+    const nome = fornecedorNome.trim();
+    const cnpj = fornecedorCnpj.trim();
+
+    if (!nome) {
+      Alert.alert("Atenção", "Informe o nome do fornecedor.");
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.8,
-      allowsEditing: false,
-    });
-
-    if (!result.canceled && result.assets?.[0]) {
-      setImageUri(result.assets[0].uri);
-      setImageMimeType(result.assets[0].mimeType ?? "image/jpeg");
-    }
-  }
-
-  async function escolherDaGaleria() {
-    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissao.granted) {
-      Alert.alert("Permissão necessária", "Permita acesso à galeria para enviar o recibo.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.8,
-      allowsEditing: false,
-      mediaTypes: ["images"],
-    });
-
-    if (!result.canceled && result.assets?.[0]) {
-      setImageUri(result.assets[0].uri);
-      setImageMimeType(result.assets[0].mimeType ?? "image/jpeg");
-    }
-  }
-
-  async function processar() {
-    if (!imageUri) {
-      Alert.alert("Atenção", "Selecione ou capture uma imagem da nota/recibo.");
+    if (valorNumerico <= 0) {
+      Alert.alert("Atenção", "Informe um valor válido maior que zero.");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await processarDespesaComImagem({
+      await confirmarDespesaProcessada({
         tipoPessoa,
-        clienteId: clienteSelecionado?.id,
+        clienteId: clienteSelecionado?.id ?? null,
         conferidoIR,
-        imageUri,
-        imageMimeType,
+        imageUrl: "manual://sem-foto",
+        imageStorageKey: null,
+        extraido: {
+          nomeEmpresa: nome,
+          cnpj: cnpj || null,
+          dataEmissao: dataEmissao || null,
+          valorTotal: valorNumerico,
+          itens: [],
+        },
       });
-
-      Alert.alert(
-        "Despesa processada",
-        `Fornecedor: ${result.extraido.nomeEmpresa}\nValor: R$ ${result.extraido.valorTotal.toFixed(2)}\nItens: ${result.extraido.itens.length}`,
-        [{ text: "OK", onPress: () => router.replace("/(tabs)/despesas" as any) }],
-      );
+      router.replace("/(tabs)/despesas" as any);
+      return;
     } catch (error) {
-      Alert.alert("Erro", `Falha ao processar despesa: ${String(error)}`);
+      const message = error instanceof Error ? error.message : "Falha ao salvar despesa.";
+      Alert.alert("Erro", message);
     } finally {
       setLoading(false);
     }
@@ -113,7 +106,7 @@ export default function NovaDespesaScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.label, { color: colors.foreground }]}>Classificação</Text>
         <View style={styles.row}>
           <TouchableOpacity
@@ -153,32 +146,56 @@ export default function NovaDespesaScreen() {
           <Switch value={conferidoIR} onValueChange={setConferidoIR} />
         </View>
 
-        <Text style={[styles.label, { color: colors.foreground }]}>Imagem da nota/recibo</Text>
-        <View style={styles.row}>
-          <Button title="Câmera" onPress={tirarFoto} variant="secondary" icon={<MaterialIcons name="photo-camera" size={16} color={colors.foreground} />} style={{ flex: 1 }} />
-          <Button title="Galeria" onPress={escolherDaGaleria} variant="secondary" icon={<MaterialIcons name="photo-library" size={16} color={colors.foreground} />} style={{ flex: 1 }} />
-        </View>
+        <Text style={[styles.label, { color: colors.foreground }]}>Fornecedor</Text>
+        <TextInput
+          style={[styles.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.surface }]}
+          value={fornecedorNome}
+          onChangeText={setFornecedorNome}
+          placeholder="Nome do fornecedor"
+          placeholderTextColor={colors.muted}
+        />
 
-        {imageUri ? (
-          <View style={[styles.previewBox, { borderColor: colors.border, backgroundColor: colors.surface }]}> 
-            <MaterialIcons name="check-circle" size={20} color={colors.success} />
-            <Text style={{ color: colors.foreground, flex: 1 }} numberOfLines={1}>Imagem selecionada</Text>
-            <TouchableOpacity onPress={() => setImageUri(null)}>
-              <MaterialIcons name="close" size={18} color={colors.muted} />
-            </TouchableOpacity>
-          </View>
-        ) : null}
+        <Text style={[styles.label, { color: colors.foreground }]}>CNPJ (opcional)</Text>
+        <TextInput
+          style={[styles.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.surface }]}
+          value={fornecedorCnpj}
+          onChangeText={setFornecedorCnpj}
+          placeholder="00.000.000/0000-00"
+          placeholderTextColor={colors.muted}
+          keyboardType="numbers-and-punctuation"
+        />
+
+        <Text style={[styles.label, { color: colors.foreground }]}>Data de emissão (opcional)</Text>
+        <DatePicker
+          value={dataEmissao}
+          onChange={setDataEmissao}
+        />
+
+        <Text style={[styles.label, { color: colors.foreground }]}>Valor da despesa</Text>
+        <TextInput
+          style={[styles.input, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.surface }]}
+          value={valorTotal}
+          onChangeText={setValorTotal}
+          placeholder="0,00"
+          placeholderTextColor={colors.muted}
+          keyboardType="decimal-pad"
+        />
+        <Text style={[styles.inputHint, { color: colors.muted }]}>Aceita 10 ou 10,00</Text>
 
         <View style={{ marginTop: 20 }}>
           <Button
-            title={loading ? "Processando IA..." : "Processar com IA"}
-            onPress={processar}
+            title={loading ? "Salvando despesa..." : "Salvar despesa"}
+            onPress={salvarManual}
             loading={loading}
             disabled={loading}
-            icon={!loading ? <MaterialIcons name="auto-awesome" size={16} color="#fff" /> : undefined}
+            icon={
+              !loading ? (
+                <MaterialIcons name="save" size={16} color="#fff" />
+              ) : undefined
+            }
           />
         </View>
-      </View>
+      </ScrollView>
 
       <Modal visible={modalCliente} transparent animationType="fade" onRequestClose={() => setModalCliente(false)}>
         <View style={styles.modalOverlay}>
@@ -270,6 +287,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+  },
+  inputHint: {
+    fontSize: 12,
+    marginTop: 4,
+  },
   switchRow: {
     borderWidth: 1,
     borderRadius: 10,
@@ -278,16 +306,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 4,
-  },
-  previewBox: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     marginTop: 4,
   },
   modalOverlay: {

@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, AppState, type AppStateStatus,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -18,7 +18,15 @@ const MESES = [
 ];
 
 function toISO(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function msUntilNextLocalMidnight(from = new Date()) {
+  const nextMidnight = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1, 0, 0, 0, 50);
+  return Math.max(1000, nextMidnight.getTime() - from.getTime());
 }
 
 function formatMoney(v: number) {
@@ -47,7 +55,7 @@ function getValorExibicao(item: Agendamento & { isRetorno?: boolean }) {
 export default function AgendaScreen() {
   const colors = useColors();
   const router = useRouter();
-  const today = toISO(new Date());
+  const [today, setToday] = useState(() => toISO(new Date()));
 
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date();
@@ -59,6 +67,25 @@ export default function AgendaScreen() {
   const load = useCallback(async () => {
     const all = await getAgendamentos();
     setAllAgendamentos(all);
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setToday(toISO(new Date()));
+    }, msUntilNextLocalMidnight());
+
+    return () => clearTimeout(timeout);
+  }, [today]);
+
+  useEffect(() => {
+    const onAppStateChange = (state: AppStateStatus) => {
+      if (state !== "active") return;
+      const localToday = toISO(new Date());
+      setToday((prev) => (prev === localToday ? prev : localToday));
+    };
+
+    const subscription = AppState.addEventListener("change", onAppStateChange);
+    return () => subscription.remove();
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));

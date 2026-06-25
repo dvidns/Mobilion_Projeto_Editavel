@@ -25,6 +25,36 @@ export interface ProcessarDespesaPayload {
   tipoPessoa: TipoPessoa;
   clienteId?: string | null;
   conferidoIR?: boolean;
+  salvar?: boolean;
+}
+
+export type IaProcessarErroCodigo =
+  | "OPENAI_KEY_MISSING"
+  | "OPENAI_REQUEST_FAILED"
+  | "OPENAI_EMPTY_OUTPUT"
+  | "OPENAI_INVALID_JSON"
+  | "OPENAI_SCHEMA_INVALID"
+  | "NO_USEFUL_DATA"
+  | "UNKNOWN";
+
+export interface ProcessarDespesaData {
+  imageUrl: string;
+  imageStorageKey: string | null;
+  extraido: DespesaExtraida;
+  salvo: boolean;
+  id: string | null;
+  tipoPessoa: TipoPessoa;
+  clienteId: string | null;
+  conferidoIR: boolean;
+}
+
+export interface ConfirmarDespesaPayload {
+  tipoPessoa: TipoPessoa;
+  clienteId?: string | null;
+  conferidoIR?: boolean;
+  imageUrl: string;
+  imageStorageKey?: string | null;
+  extraido: DespesaExtraida;
 }
 
 export interface DespesaRegistro {

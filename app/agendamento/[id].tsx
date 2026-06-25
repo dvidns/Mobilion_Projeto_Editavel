@@ -17,7 +17,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useWhatsApp } from "@/hooks/use-whatsapp";
 import {
   getAgendamentos, updateAgendamento, deleteAgendamento, getClientes,
-  atualizarEnderecoCliente, getItensEstoque, getMargemPecas, addItemEstoque,
+  atualizarEnderecoCliente, registrarEnderecoCliente, getItensEstoque, getMargemPecas, addItemEstoque, baixarEstoquePorItensServico,
   type Agendamento, type StatusAgendamento, type ItemEstoque,
 } from "@/lib/store";
 import { generateOrcamentoPDF, sharePDF } from "@/lib/pdf-service";
@@ -168,6 +168,10 @@ export default function AgendamentoDetalheScreen() {
       ...STATUS_OPCOES.map((o) => ({
         text: o.label,
         onPress: async () => {
+          if (o.value === "concluido") {
+            marcarComoConcluido();
+            return;
+          }
           await updateAgendamento(item!.id, { status: o.value });
           setItem({ ...item!, status: o.value });
         },
@@ -257,6 +261,7 @@ export default function AgendamentoDetalheScreen() {
             ...moveisAtualizados,
             {
               id: Math.random().toString(36).slice(2),
+              servicoId: p.id,
               servicoNome: p.nome,
               valor: parseFloat((p.preco * (1 + margemPecas / 100)).toFixed(2)),
               quantidade: p.qtd,
@@ -278,10 +283,20 @@ export default function AgendamentoDetalheScreen() {
 
       await updateAgendamento(currentItem.id, payload);
 
-      // Atualizar endereço do cliente quando há endereço de retorno definido
+      // Salvar endereço principal digitado no contato do cliente.
+      const enderecoPrincipalNovo = (payload.endereco ?? currentItem.endereco ?? "").trim();
+      if (enderecoPrincipalNovo) {
+        await atualizarEnderecoCliente(currentItem.clienteId, enderecoPrincipalNovo);
+      }
+
+      // Se o retorno tiver endereço diferente, manter como registro no histórico.
       const enderecoRetornoNovo = (payload.enderecoRetorno ?? currentItem.enderecoRetorno ?? "").trim();
-      if (enderecoRetornoNovo && (payload.temRetorno ?? currentItem.temRetorno)) {
-        await atualizarEnderecoCliente(currentItem.clienteId, enderecoRetornoNovo);
+      if (
+        enderecoRetornoNovo
+        && (payload.temRetorno ?? currentItem.temRetorno)
+        && enderecoRetornoNovo !== enderecoPrincipalNovo
+      ) {
+        await registrarEnderecoCliente(currentItem.clienteId, enderecoRetornoNovo);
       }
 
       setItem({ ...currentItem, ...payload });
@@ -293,20 +308,35 @@ export default function AgendamentoDetalheScreen() {
   }
 
   async function confirmarConclusao(valorText: string) {
+    if (item!.status === "concluido") {
+      setModalConcluidoVisible(false);
+      return;
+    }
+
     const valorRecebido = parseFloat(valorText.replace(",", ".")) || item!.valor;
     const dataConclusao = new Date().toISOString();
+
+    const baixaEstoque = await baixarEstoquePorItensServico(item!.moveis ?? []);
     await updateAgendamento(item!.id, { status: "concluido", valorRecebido, dataConclusao });
     setItem({ ...item!, status: "concluido", valorRecebido, dataConclusao });
     setModalConcluidoVisible(false);
+
     const diferenca = valorRecebido - item!.valor;
     const mensagemDiferenca = diferenca > 0
       ? `\n\n✅ Adicional recebido: +${formatMoney(diferenca)}`
       : diferenca < 0
       ? `\n\n⚠️ Diferença: ${formatMoney(diferenca)}`
       : "";
+
+    const totalDebitado = baixaEstoque.reduce((sum, b) => sum + b.debitado, 0);
+    const totalFaltante = baixaEstoque.reduce((sum, b) => sum + b.faltante, 0);
+    const mensagemEstoque = baixaEstoque.length > 0
+      ? `\n\n📦 Estoque atualizado: ${totalDebitado} item(ns) baixado(s)${totalFaltante > 0 ? `\n⚠️ Faltante no estoque: ${totalFaltante} item(ns)` : ""}`
+      : "";
+
     Alert.alert(
       "Sucesso",
-      `Agendamento concluído!\n\nValor orçado: ${formatMoney(item!.valor)}\nValor recebido: ${formatMoney(valorRecebido)}${mensagemDiferenca}`
+      `Agendamento concluído!\n\nValor orçado: ${formatMoney(item!.valor)}\nValor recebido: ${formatMoney(valorRecebido)}${mensagemDiferenca}${mensagemEstoque}`
     );
   }
 

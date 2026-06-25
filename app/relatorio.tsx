@@ -11,6 +11,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import { getAgendamentos, type Agendamento } from "@/lib/store";
+import { listarDespesas } from "@/lib/despesas-api";
 import { gerarRelatorioExcel, gerarRelatorioPDF, gerarRelatorioCSV } from "@/lib/report-service";
 
 function formatMoney(v: number) {
@@ -20,7 +21,9 @@ function formatMoney(v: number) {
 interface MesData {
   mes: number;
   ano: number;
-  total: number;
+  faturamento: number;
+  despesas: number;
+  resultadoFinal: number;
   servicos: number;
 }
 
@@ -43,7 +46,10 @@ export default function RelatorioScreen() {
 
   const calcularStats = useCallback(async () => {
     try {
-      const agendamentos = await getAgendamentos();
+      const [agendamentos, despesasMes] = await Promise.all([
+        getAgendamentos(),
+        listarDespesas({ ano: anoAtual, mes: mesAtual + 1 }),
+      ]);
 
       // Filtrar agendamentos do mês/ano selecionado e que estão concluídos
       const agendamentosMes = agendamentos.filter((a) => {
@@ -55,7 +61,9 @@ export default function RelatorioScreen() {
       const getValor = (a: Agendamento) => a.valorRecebido !== undefined ? a.valorRecebido : a.valor;
 
       // Calcular total usando valor recebido
-      const total = agendamentosMes.reduce((sum, a) => sum + getValor(a), 0);
+      const faturamento = agendamentosMes.reduce((sum, a) => sum + getValor(a), 0);
+      const despesas = despesasMes.reduce((sum, d) => sum + d.valorTotal, 0);
+      const resultadoFinal = faturamento - despesas;
 
       // Agrupar por tipo de serviço usando valor recebido
       const porTipo: { [key: string]: TipoServicoStats } = {};
@@ -67,7 +75,14 @@ export default function RelatorioScreen() {
         porTipo[a.tipoServico].total += getValor(a);
       });
 
-      setStats({ mes: mesAtual, ano: anoAtual, total, servicos: agendamentosMes.length });
+      setStats({
+        mes: mesAtual,
+        ano: anoAtual,
+        faturamento,
+        despesas,
+        resultadoFinal,
+        servicos: agendamentosMes.length,
+      });
       setTiposServico(
         Object.values(porTipo).sort((a, b) => b.total - a.total)
       );
@@ -200,7 +215,24 @@ export default function RelatorioScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.cardLabel, { color: colors.muted }]}>Faturamento Total</Text>
             <Text style={[styles.cardValue, { color: colors.success }]}>
-              {formatMoney(stats?.total || 0)}
+              {formatMoney(stats?.faturamento || 0)}
+            </Text>
+          </View>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardLabel, { color: colors.muted }]}>Despesas do Mês</Text>
+            <Text style={[styles.cardValue, { color: colors.warning }]}>
+              {formatMoney(stats?.despesas || 0)}
+            </Text>
+          </View>
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardLabel, { color: colors.muted }]}>Resultado Final</Text>
+            <Text
+              style={[
+                styles.cardValue,
+                { color: (stats?.resultadoFinal || 0) >= 0 ? colors.success : colors.warning },
+              ]}
+            >
+              {formatMoney(stats?.resultadoFinal || 0)}
             </Text>
           </View>
         </View>
@@ -329,10 +361,11 @@ const styles = StyleSheet.create({
   },
   resumoCards: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   card: {
-    flex: 1,
+    width: "48%",
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,

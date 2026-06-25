@@ -4,10 +4,17 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { desc } from "drizzle-orm";
 import { despesaItens, despesas } from "../../drizzle/schema";
-import { tipoPessoaSchema } from "../../shared/despesas";
+import {
+  despesaExtraidaSchema,
+  tipoPessoaSchema,
+  type ConfirmarDespesaPayload,
+  type DespesaExtraida,
+  type IaProcessarErroCodigo,
+} from "../../shared/despesas";
+import { ENV } from "../_core/env";
 import { getDb } from "../db";
 import { storagePut } from "../storage";
-import { extrairDespesaComIA } from "./ai-extractor";
+import { IAExtractionError, extrairDespesaComIA } from "./ai-extractor";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -26,10 +33,23 @@ const upload = multer({
 const payloadSchema = z.object({
   tipoPessoa: tipoPessoaSchema,
   clienteId: z.string().trim().min(1).optional(),
+  salvar: z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .transform((value) => value === true || value === "true")
+    .optional(),
   conferidoIR: z
     .union([z.literal("true"), z.literal("false"), z.boolean()])
     .transform((value) => value === true || value === "true")
     .optional(),
+});
+
+const confirmarPayloadSchema = z.object({
+  tipoPessoa: tipoPessoaSchema,
+  clienteId: z.string().trim().min(1).nullable().optional(),
+  conferidoIR: z.boolean().optional(),
+  imageUrl: z.string().min(1),
+  imageStorageKey: z.string().nullable().optional(),
+  extraido: despesaExtraidaSchema,
 });
 
 const filtroQuerySchema = z.object({
@@ -132,8 +152,72 @@ function buildCsv(data: RegistroDespesa[]) {
   return lines.join("\n");
 }
 
+function hasDadosUteis(extraido: DespesaExtraida): boolean {
+  const fornecedorValido = extraido.nomeEmpresa.trim().length > 1;
+  const valorValido = extraido.valorTotal > 0;
+  const itensValidos = extraido.itens.some(
+    (item) => item.nome.trim().length > 0 && item.valor_total > 0 && item.quantidade > 0,
+  );
+  return fornecedorValido && (valorValido || itensValidos);
+}
+
+async function persistirDespesa(params: {
+  userOpenId: string | null;
+  payload: Pick<ConfirmarDespesaPayload, "tipoPessoa" | "clienteId" | "conferidoIR">;
+  imageUrl: string;
+  imageStorageKey: string | null;
+  extraido: DespesaExtraida;
+}): Promise<string> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Banco de dados indisponivel para salvar a despesa");
+  }
+
+  const despesaId = randomUUID();
+  await db.insert(despesas).values({
+    id: despesaId,
+    userOpenId: params.userOpenId,
+    tipoPessoa: params.payload.tipoPessoa,
+    clienteId: params.payload.clienteId ?? null,
+    fornecedorNome: params.extraido.nomeEmpresa,
+    fornecedorCnpj: params.extraido.cnpj,
+    dataEmissao: params.extraido.dataEmissao,
+    valorTotal: params.extraido.valorTotal.toFixed(2),
+    imageUrl: params.imageUrl,
+    imageStorageKey: params.imageStorageKey,
+    conferidoIR: params.payload.conferidoIR ? 1 : 0,
+    dadosExtraidosJson: JSON.stringify(params.extraido),
+  });
+
+  if (params.extraido.itens.length > 0) {
+    await db.insert(despesaItens).values(
+      params.extraido.itens.map((item) => ({
+        despesaId,
+        nome: item.nome,
+        quantidade: item.quantidade.toFixed(3),
+        valorUnitario: item.valor_unitario.toFixed(2),
+        valorTotal: item.valor_total.toFixed(2),
+      })),
+    );
+  }
+
+  return despesaId;
+}
+
 export function registerDespesasHttpRoutes(): Router {
   const router = Router();
+
+  router.get("/status-ia", (_req, res) => {
+    const configured = ENV.openAiApiKey.trim().length > 0;
+    res.json({
+      ok: true,
+      data: {
+        provider: "openai",
+        configured,
+        model: ENV.openAiModel,
+      },
+    });
+  });
 
   router.get("/", async (req, res) => {
     try {
@@ -252,8 +336,10 @@ export function registerDespesasHttpRoutes(): Router {
       const payload = payloadSchema.parse({
         tipoPessoa: req.body.tipoPessoa,
         clienteId: req.body.clienteId,
+        salvar: req.body.salvar,
         conferidoIR: req.body.conferidoIR,
       });
+      const shouldSave = payload.salvar ?? true;
       const userOpenIdHeader = req.headers["x-open-id"];
       const userOpenId =
         typeof userOpenIdHeader === "string" && userOpenIdHeader.trim().length > 0
@@ -265,9 +351,8 @@ export function registerDespesasHttpRoutes(): Router {
         mimeType: req.file.mimetype,
       });
 
-      const despesaId = randomUUID();
       const extension = req.file.originalname.split(".").pop() || "jpg";
-      const storageKey = `despesas/${despesaId}.${extension}`;
+      const storageKey = `despesas/${randomUUID()}.${extension}`;
 
       let imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
       let imageStorageKey: string | null = null;
@@ -280,34 +365,31 @@ export function registerDespesasHttpRoutes(): Router {
         console.warn("[despesas] upload em storage indisponivel, mantendo imagem em data URL", storageError);
       }
 
-      const db = await getDb();
-      if (db) {
-        await db.insert(despesas).values({
-          id: despesaId,
+      if (!hasDadosUteis(extraido)) {
+        res.status(422).json({
+          ok: false,
+          code: "NO_USEFUL_DATA" satisfies IaProcessarErroCodigo,
+          message: "A IA nao conseguiu extrair dados suficientes da imagem. Tente outra foto.",
+          data: {
+            extraido,
+          },
+        });
+        return;
+      }
+
+      let despesaId: string | null = null;
+      if (shouldSave) {
+        despesaId = await persistirDespesa({
           userOpenId,
-          tipoPessoa: payload.tipoPessoa,
-          clienteId: payload.clienteId ?? null,
-          fornecedorNome: extraido.nomeEmpresa,
-          fornecedorCnpj: extraido.cnpj,
-          dataEmissao: extraido.dataEmissao,
-          valorTotal: extraido.valorTotal.toFixed(2),
+          payload: {
+            tipoPessoa: payload.tipoPessoa,
+            clienteId: payload.clienteId ?? null,
+            conferidoIR: payload.conferidoIR ?? false,
+          },
           imageUrl,
           imageStorageKey,
-          conferidoIR: payload.conferidoIR ? 1 : 0,
-          dadosExtraidosJson: JSON.stringify(extraido),
+          extraido,
         });
-
-        if (extraido.itens.length > 0) {
-          await db.insert(despesaItens).values(
-            extraido.itens.map((item) => ({
-              despesaId,
-              nome: item.nome,
-              quantidade: item.quantidade.toFixed(3),
-              valorUnitario: item.valor_unitario.toFixed(2),
-              valorTotal: item.valor_total.toFixed(2),
-            })),
-          );
-        }
       }
 
       res.status(201).json({
@@ -318,13 +400,74 @@ export function registerDespesasHttpRoutes(): Router {
           clienteId: payload.clienteId ?? null,
           conferidoIR: payload.conferidoIR ?? false,
           imageUrl,
+          imageStorageKey,
+          salvo: shouldSave,
           extraido,
         },
       });
     } catch (error) {
       console.error("[despesas.processar] erro", error);
+      if (error instanceof IAExtractionError) {
+        res.status(422).json({
+          ok: false,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        return;
+      }
       const message = error instanceof Error ? error.message : "Falha ao processar despesa";
-      res.status(400).json({ ok: false, message });
+      res.status(400).json({ ok: false, code: "UNKNOWN" satisfies IaProcessarErroCodigo, message });
+    }
+  });
+
+  router.post("/confirmar", async (req, res) => {
+    try {
+      const payload = confirmarPayloadSchema.parse(req.body);
+      if (!hasDadosUteis(payload.extraido)) {
+        res.status(422).json({
+          ok: false,
+          code: "NO_USEFUL_DATA" satisfies IaProcessarErroCodigo,
+          message: "Nao e permitido salvar despesa sem dados uteis extraidos.",
+        });
+        return;
+      }
+
+      const userOpenIdHeader = req.headers["x-open-id"];
+      const userOpenId =
+        typeof userOpenIdHeader === "string" && userOpenIdHeader.trim().length > 0
+          ? userOpenIdHeader
+          : null;
+
+      const despesaId = await persistirDespesa({
+        userOpenId,
+        payload: {
+          tipoPessoa: payload.tipoPessoa,
+          clienteId: payload.clienteId ?? null,
+          conferidoIR: payload.conferidoIR ?? false,
+        },
+        imageUrl: payload.imageUrl,
+        imageStorageKey: payload.imageStorageKey ?? null,
+        extraido: payload.extraido,
+      });
+
+      res.status(201).json({
+        ok: true,
+        data: {
+          id: despesaId,
+          tipoPessoa: payload.tipoPessoa,
+          clienteId: payload.clienteId ?? null,
+          conferidoIR: payload.conferidoIR ?? false,
+          imageUrl: payload.imageUrl,
+          imageStorageKey: payload.imageStorageKey ?? null,
+          salvo: true,
+          extraido: payload.extraido,
+        },
+      });
+    } catch (error) {
+      console.error("[despesas.confirmar] erro", error);
+      const message = error instanceof Error ? error.message : "Falha ao confirmar despesa";
+      res.status(400).json({ ok: false, code: "UNKNOWN" satisfies IaProcessarErroCodigo, message });
     }
   });
 

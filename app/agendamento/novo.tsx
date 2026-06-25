@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useColors } from "@/hooks/use-colors";
 import {
-  addAgendamento, getClientes, addCliente, updateCliente, atualizarEnderecoCliente, getServicos, addServico,
+  addAgendamento, getClientes, addCliente, atualizarEnderecoCliente, registrarEnderecoCliente, getServicos, addServico,
   getItensEstoque, getMargemPecas, addItemEstoque, getValorHora,
   type Cliente, type Servico, type ItemEstoque,
 } from "@/lib/store";
@@ -151,6 +151,7 @@ export default function NovoAgendamentoScreen() {
 
   // Modal states
   const [modalCliente, setModalCliente] = useState(false);
+  const [modalNovoCliente, setModalNovoCliente] = useState(false);
   const [modalServico, setModalServico] = useState(false);
   const [modalContatos, setModalContatos] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -160,6 +161,10 @@ export default function NovoAgendamentoScreen() {
   const [contatosBusca, setContatosBusca] = useState("");
   const [contatosLista, setContatosLista] = useState<Contacts.Contact[]>([]);
   const [carregandoContatos, setCarregandoContatos] = useState(false);
+  const [novoClienteNome, setNovoClienteNome] = useState("");
+  const [novoClienteTelefone, setNovoClienteTelefone] = useState("");
+  const [novoClienteEndereco, setNovoClienteEndereco] = useState("");
+  const [salvandoClienteManual, setSalvandoClienteManual] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(1);
@@ -251,8 +256,10 @@ export default function NovoAgendamentoScreen() {
   }, []);
 
   // ── Selecionar contato e criar/reusar cliente ─────────────────────────────
+  const normalizarTelefone = useCallback((telefone: string) => telefone.replace(/\D/g, ""), []);
+
   const selecionarContato = useCallback(async (contato: Contacts.Contact) => {
-    const tel = contato.phoneNumbers![0].number?.replace(/\D/g, "") ?? "";
+    const tel = normalizarTelefone(contato.phoneNumbers![0].number ?? "");
     const nome = contato.name!;
     // Tentar extrair endereço do contato (se disponível)
     const enderecoDoPerfil = contato.addresses?.[0]?.street || "";
@@ -275,7 +282,58 @@ export default function NovoAgendamentoScreen() {
       }
     }
     setModalContatos(false);
-  }, [clientes]);
+  }, [clientes, normalizarTelefone]);
+
+  const salvarNovoClienteManual = useCallback(async () => {
+    const nome = novoClienteNome.trim();
+    const telefone = normalizarTelefone(novoClienteTelefone);
+    const enderecoManual = novoClienteEndereco.trim();
+
+    if (!nome) {
+      Alert.alert("Atenção", "Informe o nome do cliente.");
+      return;
+    }
+
+    setSalvandoClienteManual(true);
+    try {
+      const clienteExistente = clientes.find((c) => {
+        const mesmoTelefone = !!telefone && c.telefone === telefone;
+        const mesmoNome = c.nome.trim().toLowerCase() === nome.toLowerCase();
+        return mesmoTelefone || mesmoNome;
+      });
+
+      if (clienteExistente) {
+        setClienteSelecionado(clienteExistente);
+        if (enderecoManual) {
+          await atualizarEnderecoCliente(clienteExistente.id, enderecoManual);
+          const atualizados = await getClientes();
+          setClientes(atualizados);
+          const clienteAtualizado = atualizados.find((c) => c.id === clienteExistente.id) ?? clienteExistente;
+          setClienteSelecionado(clienteAtualizado);
+        }
+        setEndereco(enderecoManual || clienteExistente.endereco || "");
+      } else {
+        const novoCliente = await addCliente({
+          nome,
+          telefone,
+          endereco: enderecoManual,
+        });
+        setClientes((prev) => [...prev, novoCliente]);
+        setClienteSelecionado(novoCliente);
+        setEndereco(enderecoManual);
+      }
+
+      setModalNovoCliente(false);
+      setNovoClienteNome("");
+      setNovoClienteTelefone("");
+      setNovoClienteEndereco("");
+    } catch (error) {
+      console.error("Erro ao cadastrar cliente manualmente:", error);
+      Alert.alert("Erro", "Não foi possível cadastrar o cliente.");
+    } finally {
+      setSalvandoClienteManual(false);
+    }
+  }, [novoClienteNome, novoClienteTelefone, novoClienteEndereco, normalizarTelefone, clientes]);
 
   // ── Filtrar contatos pela busca ───────────────────────────────────────────
   // Removido: agora usa useMemo acima
@@ -382,15 +440,16 @@ export default function NovoAgendamentoScreen() {
         enderecoRetorno: temRetorno ? enderecoRetorno : undefined,
       });
 
-      // Update the client's address if one was entered and the client doesn't have one yet
-      const enderecoTrimmed = endereco.trim();
-      if (enderecoTrimmed && !clienteSelecionado.endereco) {
-        await updateCliente(clienteSelecionado.id, { endereco: enderecoTrimmed });
+      // Sempre salvar o endereço principal digitado junto ao contato do cliente.
+      const enderecoPrincipal = endereco.trim();
+      if (enderecoPrincipal) {
+        await atualizarEnderecoCliente(clienteSelecionado.id, enderecoPrincipal);
       }
 
-      // Atualizar endereço do cliente quando há endereço de retorno definido
-      if (temRetorno && enderecoRetorno.trim()) {
-        await atualizarEnderecoCliente(clienteSelecionado.id, enderecoRetorno.trim());
+      // Quando o retorno tiver outro endereço, registra no histórico sem sobrescrever o principal.
+      const enderecoRet = enderecoRetorno.trim();
+      if (temRetorno && enderecoRet && enderecoRet !== enderecoPrincipal) {
+        await registrarEnderecoCliente(clienteSelecionado.id, enderecoRet);
       }
 
       router.back();
@@ -527,6 +586,14 @@ export default function NovoAgendamentoScreen() {
             <Text style={[styles.clienteOpcaoText, { color: colors.primary }]}>
               {carregandoContatos ? "Carregando..." : "Buscar no\ncelular"}
             </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.clienteOpcaoBtn, { borderColor: colors.success, backgroundColor: colors.success + "12" }]}
+            onPress={() => setModalNovoCliente(true)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="person-add" size={20} color={colors.success} />
+            <Text style={[styles.clienteOpcaoText, { color: colors.success }]}>Cadastrar\nmanual</Text>
           </TouchableOpacity>
         </View>
         {clienteSelecionado ? (
@@ -1103,6 +1170,75 @@ export default function NovoAgendamentoScreen() {
                 <MaterialIcons name="check" size={16} color="#fff" />
                 <Text style={styles.wizardBtnProximoText}>{salvandoPeca ? "Salvando..." : "Salvar"}</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ══ MODAL: Contatos do celular ══════════════════════════════════════ */}
+      <Modal visible={modalNovoCliente} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Cadastrar Cliente</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setModalNovoCliente(false);
+                  setNovoClienteNome("");
+                  setNovoClienteTelefone("");
+                  setNovoClienteEndereco("");
+                }}
+              >
+                <MaterialIcons name="close" size={24} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
+              <Input
+                label="Nome *"
+                value={novoClienteNome}
+                onChangeText={setNovoClienteNome}
+                placeholder="Nome do cliente"
+              />
+              <Input
+                label="Telefone"
+                value={novoClienteTelefone}
+                onChangeText={(t) => setNovoClienteTelefone(t.replace(/[^\d()+\-\s]/g, ""))}
+                placeholder="(11) 99999-9999"
+                keyboardType="phone-pad"
+              />
+              <Input
+                label="Endereço"
+                value={novoClienteEndereco}
+                onChangeText={setNovoClienteEndereco}
+                placeholder="Rua, número, bairro"
+              />
+
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+                <TouchableOpacity
+                  style={[styles.wizardBtnVoltar, { flex: 1, borderColor: colors.border, backgroundColor: colors.surface }]}
+                  onPress={() => {
+                    setModalNovoCliente(false);
+                    setNovoClienteNome("");
+                    setNovoClienteTelefone("");
+                    setNovoClienteEndereco("");
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.wizardBtnVoltarText, { color: colors.foreground }]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.wizardBtnProximo, { flex: 1, backgroundColor: salvandoClienteManual ? colors.border : colors.primary }]}
+                  onPress={salvarNovoClienteManual}
+                  disabled={salvandoClienteManual}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="check" size={16} color="#fff" />
+                  <Text style={styles.wizardBtnProximoText}>
+                    {salvandoClienteManual ? "Salvando..." : "Salvar"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>

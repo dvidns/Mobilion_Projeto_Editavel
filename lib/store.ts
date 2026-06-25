@@ -56,6 +56,7 @@ export interface Agendamento {
   status: StatusAgendamento;
   moveis?: Array<{
     id: string;
+    servicoId?: string;
     servicoNome: string;
     valor: number;
     quantidade: number;
@@ -311,6 +312,38 @@ export async function atualizarEnderecoCliente(id: string, novoEndereco: string)
   await saveClientes(updated);
 }
 
+/**
+ * Registra um endereço no histórico do cliente sem alterar o endereço principal.
+ * Se o cliente não tiver endereço principal, o novo endereço vira principal.
+ */
+export async function registrarEnderecoCliente(id: string, endereco: string): Promise<void> {
+  const enderecoTrimmed = endereco.trim();
+  if (!enderecoTrimmed) return;
+
+  const clientes = await getClientes();
+  const updated = clientes.map((c) => {
+    if (c.id !== id) return c;
+
+    const enderecoAtual = (c.endereco ?? "").trim();
+    if (!enderecoAtual) {
+      return { ...c, endereco: enderecoTrimmed };
+    }
+
+    if (enderecoAtual === enderecoTrimmed) {
+      return c;
+    }
+
+    const historico = c.historicoEnderecos ?? [];
+    if (historico.includes(enderecoTrimmed)) {
+      return c;
+    }
+
+    return { ...c, historicoEnderecos: [enderecoTrimmed, ...historico] };
+  });
+
+  await saveClientes(updated);
+}
+
 export async function deleteCliente(id: string): Promise<void> {
   const clientes = await getClientes();
   await saveClientes(clientes.filter((c) => c.id !== id));
@@ -537,6 +570,82 @@ export async function getItensEstoque(): Promise<ItemEstoque[]> {
 
 export async function saveItensEstoque(itens: ItemEstoque[]): Promise<void> {
   await AsyncStorage.setItem(KEYS.itensEstoque, JSON.stringify(itens));
+}
+
+export interface BaixaEstoqueItem {
+  itemId: string;
+  nome: string;
+  solicitado: number;
+  debitado: number;
+  faltante: number;
+  estoqueAntes: number;
+  estoqueDepois: number;
+}
+
+/**
+ * Dá baixa no estoque com base nos itens usados no serviço.
+ * Nunca permite estoque negativo: se faltar, zera e informa o faltante.
+ */
+export async function baixarEstoquePorItensServico(
+  itensServico: Array<{ servicoId?: string; servicoNome?: string; quantidade?: number }>
+): Promise<BaixaEstoqueItem[]> {
+  if (!itensServico.length) return [];
+
+  const estoque = await getItensEstoque();
+  if (!estoque.length) return [];
+
+  const demandas = new Map<string, number>();
+  const pecasPorNome = new Map(
+    estoque
+      .filter((i) => i.categoria === "peca")
+      .map((i) => [i.nome.trim().toLowerCase(), i])
+  );
+
+  for (const item of itensServico) {
+    const qtd = Math.max(0, Math.trunc(Number(item.quantidade) || 0));
+    if (!qtd) continue;
+
+    let itemEstoque: ItemEstoque | undefined;
+    if (item.servicoId) {
+      itemEstoque = estoque.find((e) => e.id === item.servicoId);
+    }
+
+    if (!itemEstoque && item.servicoNome) {
+      itemEstoque = pecasPorNome.get(item.servicoNome.trim().toLowerCase());
+    }
+
+    if (!itemEstoque) continue;
+
+    const atual = demandas.get(itemEstoque.id) ?? 0;
+    demandas.set(itemEstoque.id, atual + qtd);
+  }
+
+  if (!demandas.size) return [];
+
+  const resumo: BaixaEstoqueItem[] = [];
+  const atualizados = estoque.map((e) => {
+    const solicitado = demandas.get(e.id) ?? 0;
+    if (!solicitado) return e;
+
+    const debitado = Math.min(e.estoque, solicitado);
+    const faltante = Math.max(0, solicitado - debitado);
+    const estoqueDepois = Math.max(0, e.estoque - debitado);
+
+    resumo.push({
+      itemId: e.id,
+      nome: e.nome,
+      solicitado,
+      debitado,
+      faltante,
+      estoqueAntes: e.estoque,
+      estoqueDepois,
+    });
+
+    return { ...e, estoque: estoqueDepois };
+  });
+
+  await saveItensEstoque(atualizados);
+  return resumo;
 }
 
 export async function addItemEstoque(data: Omit<ItemEstoque, "id" | "criadoEm">): Promise<ItemEstoque> {

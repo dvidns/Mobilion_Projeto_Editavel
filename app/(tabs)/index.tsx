@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, AppState, type AppStateStatus,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -17,6 +17,18 @@ import {
 
 function formatDate(date: Date) {
   return date.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function toLocalISODate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function msUntilNextLocalMidnight(from = new Date()) {
+  const nextMidnight = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1, 0, 0, 0, 50);
+  return Math.max(1000, nextMidnight.getTime() - from.getTime());
 }
 
 function formatMoney(v: number) {
@@ -39,17 +51,17 @@ export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const [agendamentos, setAgendamentos] = useState<AgendamentoComRetorno[]>([]);
-  const today = new Date().toISOString().slice(0, 10);
+  const [today, setToday] = useState(() => toLocalISODate());
 
-  const load = useCallback(async () => {
+  const loadForDate = useCallback(async (dateISO: string) => {
     const all = await getAgendamentos();
     const todayItems = all
       .flatMap((a): AgendamentoComRetorno[] => {
         const items: AgendamentoComRetorno[] = [];
-        if (a.data === today) {
+        if (a.data === dateISO) {
           items.push({ ...a, isRetorno: false });
         }
-        if (a.temRetorno && a.dataRetorno === today) {
+        if (a.temRetorno && a.dataRetorno === dateISO) {
           items.push({ ...a, isRetorno: true });
         }
         return items;
@@ -60,9 +72,35 @@ export default function HomeScreen() {
         return horaA.localeCompare(horaB);
       });
     setAgendamentos(todayItems);
+  }, []);
+
+  useEffect(() => {
+    void loadForDate(today);
+  }, [loadForDate, today]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setToday(toLocalISODate());
+    }, msUntilNextLocalMidnight());
+
+    return () => clearTimeout(timeout);
   }, [today]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useEffect(() => {
+    const onAppStateChange = (state: AppStateStatus) => {
+      if (state !== "active") return;
+      const localToday = toLocalISODate();
+      setToday((prev) => (prev === localToday ? prev : localToday));
+      void loadForDate(localToday);
+    };
+
+    const subscription = AppState.addEventListener("change", onAppStateChange);
+    return () => subscription.remove();
+  }, [loadForDate]);
+
+  useFocusEffect(useCallback(() => {
+    void loadForDate(today);
+  }, [loadForDate, today]));
 
   const total = agendamentos
     .filter((a) => a.status !== "cancelado")
@@ -76,7 +114,7 @@ export default function HomeScreen() {
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
         <View>
           <Text style={styles.headerSub}>Hoje</Text>
-          <Text style={styles.headerDate}>{formatDate(new Date())}</Text>
+          <Text style={styles.headerDate}>{formatDate(new Date(`${today}T12:00:00`))}</Text>
         </View>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: "#fff" }]}
