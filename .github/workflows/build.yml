@@ -30,9 +30,6 @@ jobs:
           java-version: 17
           cache: gradle
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
@@ -50,11 +47,15 @@ jobs:
       - name: Garantir permissao do Gradle Wrapper
         run: chmod +x android/gradlew
 
+      - name: Limpar local.properties (CI usa ANDROID_HOME)
+        run: rm -f android/local.properties
+
       - name: Build APK Debug
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
         env:
+          CI: true
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
 
       - name: Build APK Release
@@ -62,6 +63,7 @@ jobs:
           cd android
           ./gradlew assembleRelease --no-daemon
         env:
+          CI: true
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
 
       - name: Upload APK Debug
