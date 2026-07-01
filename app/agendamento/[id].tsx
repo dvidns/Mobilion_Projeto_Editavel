@@ -1198,7 +1198,7 @@ export default function AgendamentoDetalheScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
             <Text style={[styles.modalTitle, { color: colors.foreground }]}>Alterar Status</Text>
-            <View style={{ gap: 8, marginTop: 8 }}>
+            <ScrollView style={{ gap: 8, marginTop: 8, maxHeight: 300 }} scrollEnabled>
               {STATUS_OPCOES.map((opcao) => {
                 const isCancelar = opcao.value === "cancelado";
                 return (
@@ -1227,13 +1227,13 @@ export default function AgendamentoDetalheScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-            <TouchableOpacity
-              style={[styles.modalBtn, { borderColor: colors.border, marginTop: 10 }]}
-              onPress={() => setModalStatusVisible(false)}
-            >
-              <Text style={[styles.modalBtnText, { color: colors.muted }]}>Fechar</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { borderColor: colors.border, marginTop: 10 }]}
+                onPress={() => setModalStatusVisible(false)}
+              >
+                <Text style={[styles.modalBtnText, { color: colors.muted }]}>Fechar</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
