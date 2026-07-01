@@ -1,25 +1,42 @@
-name: Build APK
+name: Android Build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: android-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Android APKs
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout repositório
         uses: actions/checkout@v4
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 9.12.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,43 +44,38 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
       - name: Instalar dependências
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
-      - name: Expo Prebuild (gerar pasta android)
-        run: npx expo prebuild --platform android --no-install
-        env:
-          EXPO_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}
+      - name: Garantir permissao do Gradle Wrapper
+        run: chmod +x android/gradlew
 
-      - name: Build APK (assembleRelease)
+      - name: Build APK Debug
         run: |
           cd android
-          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+
+      - name: Build APK Release
+        run: |
+          cd android
           ./gradlew assembleRelease --no-daemon
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
 
-      - name: Upload APK
+      - name: Upload APK Debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload APK Release
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
           retention-days: 7
-
-      - name: Publicar GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: "MontaFácil v${{ github.run_number }}"
-          files: android/app/build/outputs/apk/release/app-release.apk
-          body: |
-            Build automático gerado pelo GitHub Actions.
-            Commit: ${{ github.sha }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
