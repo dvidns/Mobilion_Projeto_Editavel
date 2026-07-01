@@ -16,6 +16,8 @@ jobs:
     name: Build Android APKs
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      NODE_ENV: production
     permissions:
       contents: read
 
@@ -52,7 +54,7 @@ jobs:
       - name: Build APK Debug
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
         env:
           CI: true
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -60,7 +62,7 @@ jobs:
       - name: Build APK Release
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           CI: true
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
