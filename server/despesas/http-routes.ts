@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { randomUUID } from "crypto";
 import { z } from "zod";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { despesaItens, despesas } from "../../drizzle/schema";
 import {
   despesaExtraidaSchema,
@@ -468,6 +468,64 @@ export function registerDespesasHttpRoutes(): Router {
       console.error("[despesas.confirmar] erro", error);
       const message = error instanceof Error ? error.message : "Falha ao confirmar despesa";
       res.status(400).json({ ok: false, code: "UNKNOWN" satisfies IaProcessarErroCodigo, message });
+    }
+  });
+
+  router.post("/:id/anexo", upload.single("arquivo"), async (req, res) => {
+    try {
+      const despesaId = String(req.params.id ?? "").trim();
+      if (!despesaId) {
+        res.status(400).json({ ok: false, message: "ID da despesa e obrigatorio" });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({ ok: false, message: "Arquivo de imagem e obrigatorio no campo 'arquivo'" });
+        return;
+      }
+
+      const db = await getDb();
+      if (!db) {
+        res.status(503).json({ ok: false, message: "Banco de dados indisponivel para anexar foto" });
+        return;
+      }
+
+      const extension = req.file.originalname.split(".").pop() || "jpg";
+      const storageKey = `despesas/${despesaId}-${randomUUID()}.${extension}`;
+
+      let imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      let imageStorageKey: string | null = null;
+
+      try {
+        const storage = await storagePut(storageKey, req.file.buffer, req.file.mimetype);
+        imageUrl = storage.url;
+        imageStorageKey = storage.key;
+      } catch (storageError) {
+        console.warn("[despesas.anexo] upload em storage indisponivel, mantendo imagem em data URL", storageError);
+      }
+
+      await db
+        .update(despesas)
+        .set({
+          imageUrl,
+          imageStorageKey,
+        })
+        .where(eq(despesas.id, despesaId));
+
+      const [row] = await db.select().from(despesas).where(eq(despesas.id, despesaId)).limit(1);
+      if (!row) {
+        res.status(404).json({ ok: false, message: "Despesa nao encontrada" });
+        return;
+      }
+
+      res.status(200).json({
+        ok: true,
+        data: toRegistroDespesa(row),
+      });
+    } catch (error) {
+      console.error("[despesas.anexo] erro", error);
+      const message = error instanceof Error ? error.message : "Falha ao anexar foto da despesa";
+      res.status(400).json({ ok: false, message });
     }
   });
 

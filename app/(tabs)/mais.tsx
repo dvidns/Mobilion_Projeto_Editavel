@@ -4,9 +4,10 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
+import { useAuth } from "@/hooks/use-auth";
 
-// 🔒 Manter false até ativar assinaturas na Play Store
-const PLANOS_ENABLED = false;
+// Exibe menu de planos e assinatura no app.
+const PLANOS_ENABLED = true;
 
 interface MenuItem {
   icon: string;
@@ -17,6 +18,13 @@ interface MenuItem {
 }
 
 const MENU_ITEMS: MenuItem[] = [
+  {
+    icon: "account-circle",
+    label: "Conta e Login",
+    desc: "Entre para sincronizar dados e acessar licenças",
+    route: "/login",
+    color: "#1A73E8",
+  },
   {
     icon: "dashboard",
     label: "Painel de Controle",
@@ -65,6 +73,8 @@ const MENU_ITEMS: MenuItem[] = [
 export default function MaisScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <ScreenContainer>
@@ -88,6 +98,23 @@ export default function MaisScreen() {
             <View style={styles.menuInfo}>
               <Text style={[styles.menuLabel, { color: colors.foreground }]}>Planos e Assinatura</Text>
               <Text style={[styles.menuDesc, { color: colors.muted }]}>Desbloqueie todos os recursos Pro</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.muted} />
+          </TouchableOpacity>
+        )}
+
+        {isAdmin && (
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: "#EFF6FF", borderColor: "#60A5FA", borderWidth: 1.5 }]}
+            onPress={() => router.push("/admin-licencas" as any)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: "#3B82F618" }]}>
+              <MaterialIcons name="admin-panel-settings" size={26} color="#3B82F6" />
+            </View>
+            <View style={styles.menuInfo}>
+              <Text style={[styles.menuLabel, { color: colors.foreground }]}>Admin de Licenças</Text>
+              <Text style={[styles.menuDesc, { color: colors.muted }]}>Gerar, listar e revogar chaves de ativação</Text>
             </View>
             <MaterialIcons name="chevron-right" size={22} color={colors.muted} />
           </TouchableOpacity>

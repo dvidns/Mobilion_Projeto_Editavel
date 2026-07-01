@@ -18,6 +18,7 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ScreenContainer } from "@/components/screen-container";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
+import { PhotoPicker } from "@/components/ui/photo-picker";
 import { useColors } from "@/hooks/use-colors";
 import { getClientes, type Cliente } from "@/lib/store";
 import { confirmarDespesaProcessada } from "@/lib/despesas-api";
@@ -36,6 +37,7 @@ export default function NovaDespesaScreen() {
   const [fornecedorCnpj, setFornecedorCnpj] = useState("");
   const [dataEmissao, setDataEmissao] = useState("");
   const [valorTotal, setValorTotal] = useState("");
+  const [fotoUri, setFotoUri] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -76,7 +78,7 @@ export default function NovaDespesaScreen() {
         tipoPessoa,
         clienteId: clienteSelecionado?.id ?? null,
         conferidoIR,
-        imageUrl: "manual://sem-foto",
+        imageUrl: fotoUri.trim() || "manual://sem-foto",
         imageStorageKey: null,
         extraido: {
           nomeEmpresa: nome,
@@ -181,6 +183,14 @@ export default function NovaDespesaScreen() {
           keyboardType="decimal-pad"
         />
         <Text style={[styles.inputHint, { color: colors.muted }]}>Aceita 10 ou 10,00</Text>
+
+        <View style={{ marginTop: 12 }}>
+          <PhotoPicker
+            label="Foto da nota/recibo (opcional)"
+            currentPhotoUri={fotoUri || undefined}
+            onPhotoSelected={setFotoUri}
+          />
+        </View>
 
         <View style={{ marginTop: 20 }}>
           <Button

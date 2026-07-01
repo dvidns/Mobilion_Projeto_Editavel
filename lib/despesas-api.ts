@@ -120,6 +120,84 @@ export async function listarDespesas(params?: { ano?: number; mes?: number }): P
   }
 }
 
+export async function obterDespesaPorId(id: string): Promise<DespesaRegistro | null> {
+  const despesas = await listarDespesas();
+  return despesas.find((item) => item.id === id) ?? null;
+}
+
+async function atualizarDespesaLocalAnexo(params: {
+  despesaId: string;
+  imageUrl: string;
+  imageStorageKey: string | null;
+}) {
+  const current = await loadLocalDespesas();
+  const next = current.map((item) => {
+    if (item.id !== params.despesaId) return item;
+    return {
+      ...item,
+      imageUrl: params.imageUrl,
+      imageStorageKey: params.imageStorageKey,
+    };
+  });
+  await saveLocalDespesas(next);
+}
+
+export async function atualizarFotoDespesa(payload: {
+  despesaId: string;
+  imageUri: string;
+  imageMimeType?: string;
+}): Promise<DespesaRegistro | null> {
+  const id = payload.despesaId.trim();
+  if (!id) {
+    throw new Error("ID da despesa invalido para atualizar foto.");
+  }
+
+  const formData = new FormData();
+
+  if (Platform.OS === "web") {
+    const blob = await fetch(payload.imageUri).then((r) => r.blob());
+    formData.append("arquivo", blob, `despesa-${id}-${Date.now()}.jpg`);
+  } else {
+    formData.append("arquivo", {
+      uri: payload.imageUri,
+      name: `despesa-${id}-${Date.now()}.jpg`,
+      type: payload.imageMimeType ?? "image/jpeg",
+    } as any);
+  }
+
+  try {
+    const response = await fetch(makeUrl(`/${encodeURIComponent(id)}/anexo`), {
+      method: "POST",
+      body: formData,
+    });
+
+    const json = await parseJson<{ ok: boolean; data: DespesaRegistro }>(response);
+    await atualizarDespesaLocalAnexo({
+      despesaId: id,
+      imageUrl: json.data.imageUrl,
+      imageStorageKey: json.data.imageStorageKey,
+    });
+    return json.data;
+  } catch {
+    const localAtual = await obterDespesaPorId(id);
+    if (!localAtual) {
+      throw new Error("Nao foi possivel anexar a foto agora. Tente novamente com internet.");
+    }
+
+    await atualizarDespesaLocalAnexo({
+      despesaId: id,
+      imageUrl: payload.imageUri,
+      imageStorageKey: null,
+    });
+
+    return {
+      ...localAtual,
+      imageUrl: payload.imageUri,
+      imageStorageKey: null,
+    };
+  }
+}
+
 export async function obterStatusIA(): Promise<{
   provider: "openai";
   configured: boolean;

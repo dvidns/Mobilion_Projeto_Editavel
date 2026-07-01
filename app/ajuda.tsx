@@ -56,7 +56,7 @@ const FAQ: { q: string; a: string }[] = [
 
 // ─── Contato ─────────────────────────────────────────────────────────────────
 
-const SUPORTE_EMAIL = "contato@montafacil.app";
+const SUPORTE_EMAIL = "montafacil.app@gmail.com";
 const PRIVACIDADE_URL = "https://dvidns.github.io/appmontafacil1/";
 
 function getVersion() {
@@ -96,10 +96,23 @@ export default function AjudaScreen() {
   const colors = useColors();
   const router = useRouter();
 
-  function abrirEmail() {
-    Linking.openURL(
-      `mailto:${SUPORTE_EMAIL}?subject=Suporte%20MontaFácil&body=Olá,%20preciso%20de%20ajuda%20com...`
-    ).catch(() => Alert.alert("Erro", "Não foi possível abrir o e-mail."));
+  async function abrirEmail() {
+    const assunto = "Suporte, Sugestao ou Reclamacao - MontaFacil";
+    const corpo = "Ola, quero falar sobre...";
+    const mailtoUrl = `mailto:${SUPORTE_EMAIL}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+    const gmailWebUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(SUPORTE_EMAIL)}&su=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+
+    try {
+      const canOpenDefaultMailApp = await Linking.canOpenURL(mailtoUrl);
+      if (canOpenDefaultMailApp) {
+        await Linking.openURL(mailtoUrl);
+        return;
+      }
+
+      await Linking.openURL(gmailWebUrl);
+    } catch {
+      Alert.alert("Erro", "Nao foi possivel abrir o app de e-mail.");
+    }
   }
 
   function abrirPrivacidade() {

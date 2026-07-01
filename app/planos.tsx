@@ -7,7 +7,8 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
 import { useSubscription } from "@/hooks/use-subscription";
-import { PLANS, type PlanType } from "@/lib/subscription-store";
+import { PLANS } from "@/lib/subscription-store";
+import type { PlanType } from "@/shared/subscription";
 
 function formatExpiry(iso: string | null): string {
   if (!iso) return "";
@@ -27,16 +28,16 @@ export default function PlanosScreen() {
     const plan = PLANS.find((p) => p.id === planId)!;
     Alert.alert(
       `Assinar ${plan.name}`,
-      `${plan.price} ${plan.period}\n\n⚠️ Modo demonstração: nenhuma cobrança real será realizada.\n\nA cobrança real será ativada em breve via Google Play.`,
+      `${plan.price} ${plan.period}\n\nA compra sera processada pela Google Play e vinculada a sua conta no app.`,
       [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Ativar demonstração",
+          text: "Continuar",
           onPress: async () => {
             await purchase(planId);
             Alert.alert(
-              "✅ Plano ativado!",
-              `Você agora tem acesso ao MontaFácil ${plan.name} por 30 dias (demonstração).`,
+              "Assinatura iniciada",
+              "A validacao do plano pode levar alguns segundos apos a confirmacao da loja.",
             );
           },
         },
@@ -83,6 +84,14 @@ export default function PlanosScreen() {
           <Text style={[styles.heroSub, { color: colors.muted }]}>
             Desbloqueie relatórios, orçamentos em PDF, painel completo e muito mais.
           </Text>
+          <TouchableOpacity
+            style={[styles.activationBtn, { borderColor: colors.primary }]}
+            onPress={() => router.push("/ativar-chave" as any)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="vpn-key" size={16} color={colors.primary} />
+            <Text style={[styles.activationBtnText, { color: colors.primary }]}>Tenho chave de ativação</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Status atual */}
@@ -103,7 +112,6 @@ export default function PlanosScreen() {
             </View>
             {isPro && state.expiresAt && (
               <Text style={[styles.statusExpiry, { color: colors.muted }]}>
-                {state.isSimulated ? "⚠️ Demonstração · " : ""}
                 Válido até {formatExpiry(state.expiresAt)}
               </Text>
             )}
@@ -207,8 +215,7 @@ export default function PlanosScreen() {
         {/* Nota de rodapé */}
         <Text style={[styles.note, { color: colors.muted }]}>
           💳 O pagamento será processado via Google Play Store.{"\n"}
-          Você pode cancelar a qualquer momento nas configurações.{"\n\n"}
-          ⚠️ Atualmente em modo demonstração — nenhuma cobrança real.
+          Você pode cancelar a qualquer momento nas configurações.
         </Text>
       </ScrollView>
     </ScreenContainer>
@@ -254,6 +261,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,
+  },
+  activationBtn: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  activationBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   statusCard: {
     borderRadius: 10,

@@ -36,11 +36,11 @@ const STATUS_OPCOES: { label: string; value: StatusAgendamento }[] = [
   { label: "Pendente", value: "pendente" },
   { label: "Confirmado", value: "confirmado" },
   { label: "Concluído", value: "concluido" },
-  { label: "Cancelado", value: "cancelado" },
+  { label: "Cancelar", value: "cancelado" },
 ];
 
 export default function AgendamentoDetalheScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, etapa } = useLocalSearchParams<{ id: string; etapa?: string }>();
   const colors = useColors();
   const router = useRouter();
   const [item, setItem] = useState<Agendamento | null>(null);
@@ -51,6 +51,7 @@ export default function AgendamentoDetalheScreen() {
 
   // Modal para valor recebido (Android não suporta Alert.prompt)
   const [modalConcluidoVisible, setModalConcluidoVisible] = useState(false);
+  const [modalStatusVisible, setModalStatusVisible] = useState(false);
   const [valorRecebidoInput, setValorRecebidoInput] = useState("");
   const [novoMovelNome, setNovoMovelNome] = useState("");
   const [novoMovelValor, setNovoMovelValor] = useState("");
@@ -103,6 +104,12 @@ export default function AgendamentoDetalheScreen() {
   }, [isEditing]);
 
   if (!item) return null;
+
+  const isRetornoContext = etapa === "retorno";
+  const statusExibicao: StatusAgendamento = (() => {
+    if (item.status !== "retorno") return item.status;
+    return isRetornoContext ? "retorno" : "concluido";
+  })();
 
   const getMoveisEdicao = (): MovelAgendamento[] => {
     const source = (editData.moveis ?? item.moveis ?? []) as MovelAgendamento[];
@@ -163,21 +170,17 @@ export default function AgendamentoDetalheScreen() {
     setNovoMovelObservacao("");
   };
 
+  async function aplicarStatus(status: StatusAgendamento) {
+    if (status === "concluido") {
+      marcarComoConcluido();
+      return;
+    }
+    await updateAgendamento(item!.id, { status });
+    setItem({ ...item!, status });
+  }
+
   function changeStatus() {
-    Alert.alert("Alterar Status", undefined, [
-      ...STATUS_OPCOES.map((o) => ({
-        text: o.label,
-        onPress: async () => {
-          if (o.value === "concluido") {
-            marcarComoConcluido();
-            return;
-          }
-          await updateAgendamento(item!.id, { status: o.value });
-          setItem({ ...item!, status: o.value });
-        },
-      })),
-      { text: "Cancelar", style: "cancel" },
-    ]);
+    setModalStatusVisible(true);
   }
 
   function confirmDelete() {
@@ -308,8 +311,19 @@ export default function AgendamentoDetalheScreen() {
   }
 
   async function confirmarConclusao(valorText: string) {
-    if (item!.status === "concluido") {
+    if (statusExibicao === "concluido") {
       setModalConcluidoVisible(false);
+      return;
+    }
+
+    if (item!.temRetorno && !isRetornoContext && item!.status !== "retorno") {
+      await updateAgendamento(item!.id, { status: "retorno" });
+      setItem({ ...item!, status: "retorno" });
+      setModalConcluidoVisible(false);
+      Alert.alert(
+        "Sucesso",
+        "Primeira etapa concluída. O retorno segue pendente e só será concluído quando você finalizar o agendamento de retorno."
+      );
       return;
     }
 
@@ -341,7 +355,7 @@ export default function AgendamentoDetalheScreen() {
   }
 
   function marcarComoConcluido() {
-    if (item!.status === "concluido") return;
+    if (statusExibicao === "concluido") return;
 
     setValorRecebidoInput(String(item!.valor));
     setModalConcluidoVisible(true);
@@ -885,7 +899,7 @@ export default function AgendamentoDetalheScreen() {
           onPress={changeStatus}
           activeOpacity={0.8}
         >
-          <StatusBadge status={item.status} />
+          <StatusBadge status={statusExibicao} />
           <Text style={[styles.statusChange, { color: colors.primary }]}>Alterar →</Text>
         </TouchableOpacity>
 
@@ -932,7 +946,7 @@ export default function AgendamentoDetalheScreen() {
           )}
 
           {/* Valor recebido se concluído */}
-          {item.status === "concluido" && item.valorRecebido !== undefined && (
+          {statusExibicao === "concluido" && item.valorRecebido !== undefined && (
             <>
               <Row label="Valor Recebido" value={formatMoney(item.valorRecebido)} highlight />
               {item.valorRecebido !== item.valor && (
@@ -1092,10 +1106,10 @@ export default function AgendamentoDetalheScreen() {
         </View>
 
         <Button
-          title={item.status === "concluido" ? "Concluído" : "Marcar como Concluído"}
+          title={statusExibicao === "concluido" ? "Concluído" : "Marcar como Concluído"}
           onPress={marcarComoConcluido}
-          variant={item.status === "concluido" ? "secondary" : "primary"}
-          disabled={item.status === "concluido"}
+          variant={statusExibicao === "concluido" ? "secondary" : "primary"}
+          disabled={statusExibicao === "concluido"}
         />
 
         {/* Botão Deletar */}
@@ -1171,6 +1185,55 @@ export default function AgendamentoDetalheScreen() {
                 <Text style={[styles.modalBtnText, { color: "#fff" }]}>Confirmar</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={modalStatusVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalStatusVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Alterar Status</Text>
+            <View style={{ gap: 8, marginTop: 8 }}>
+              {STATUS_OPCOES.map((opcao) => {
+                const isCancelar = opcao.value === "cancelado";
+                return (
+                  <TouchableOpacity
+                    key={opcao.value}
+                    style={[
+                      styles.modalBtn,
+                      {
+                        borderColor: isCancelar ? colors.error : colors.border,
+                        backgroundColor: isCancelar ? colors.error + "15" : colors.surface,
+                      },
+                    ]}
+                    onPress={async () => {
+                      setModalStatusVisible(false);
+                      await aplicarStatus(opcao.value);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.modalBtnText,
+                        { color: isCancelar ? colors.error : colors.foreground },
+                      ]}
+                    >
+                      {opcao.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[styles.modalBtn, { borderColor: colors.border, marginTop: 10 }]}
+              onPress={() => setModalStatusVisible(false)}
+            >
+              <Text style={[styles.modalBtnText, { color: colors.muted }]}>Fechar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

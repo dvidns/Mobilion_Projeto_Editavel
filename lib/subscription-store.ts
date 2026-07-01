@@ -1,18 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { PlanType, SubscriptionState } from "@/shared/subscription";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export type PlanType = "free" | "pro" | "annual";
-
-export interface SubscriptionState {
-  plan: PlanType;
-  /** ISO date string — null = nunca expira (free) ou assinatura ativa sem data fim */
-  expiresAt: string | null;
-  /** ISO date string de quando assinou */
-  subscribedAt: string | null;
-  /** Simulado localmente até RevenueCat ser integrado */
-  isSimulated: boolean;
-}
 
 export interface PlanInfo {
   id: PlanType;

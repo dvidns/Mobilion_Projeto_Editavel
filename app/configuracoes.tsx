@@ -11,6 +11,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useColors } from "@/hooks/use-colors";
+import { useAuth } from "@/hooks/use-auth";
 import {
   getAvaliacaoLink, saveAvaliacaoLink,
   getLembretePersonalizado, saveLembretePersonalizado,
@@ -38,6 +39,7 @@ function getInstalledVersion(): string {
 export default function ConfiguracoesScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { user, loading: authLoading, logout } = useAuth();
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [cidade, setCidade] = useState("");
@@ -196,6 +198,24 @@ export default function ConfiguracoesScreen() {
     setBackupModalOpen(true);
   }
 
+  function sairDaConta() {
+    Alert.alert(
+      "Sair da conta",
+      "Deseja sair para entrar com outra conta?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Sair",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            router.push("/login" as any);
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <ScreenContainer edges={["top", "left", "right", "bottom"]}>
       <View style={[styles.header, { backgroundColor: colors.primary }]}>
@@ -274,6 +294,44 @@ export default function ConfiguracoesScreen() {
         </View>
 
         <Button title="Salvar Tudo" onPress={salvar} loading={saving} />
+
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.muted }]}>CONTA</Text>
+
+          {authLoading ? (
+            <View style={styles.accountRow}>
+              <ActivityIndicator size={18} color={colors.primary} />
+              <Text style={{ color: colors.muted, fontSize: 13 }}>Verificando conta...</Text>
+            </View>
+          ) : user ? (
+            <>
+              <Text style={[styles.accountName, { color: colors.foreground }]}>
+                {user.name || user.email || user.openId}
+              </Text>
+              <Text style={[styles.accountSub, { color: colors.muted }]}>
+                Método: {user.loginMethod || "oauth"} · Perfil: {user.role}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.logoutBtn, { borderColor: colors.error }]}
+                onPress={sairDaConta}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="logout" size={18} color={colors.error} />
+                <Text style={[styles.logoutBtnText, { color: colors.error }]}>Sair e trocar conta</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.updateCheckBtn, { borderColor: colors.primary, marginBottom: 0 }]}
+              onPress={() => router.push("/login" as any)}
+              activeOpacity={0.75}
+            >
+              <MaterialIcons name="login" size={18} color={colors.primary} />
+              <Text style={[styles.updateCheckText, { color: colors.primary }]}>Entrar na conta</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>ATUALIZAÇÃO E SOBRE O APP</Text>
@@ -563,6 +621,35 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     marginTop: 12,
+  },
+  accountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  accountName: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  accountSub: {
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  logoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+  },
+  logoutBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
   },
   sectionDesc: {
     fontSize: 13,

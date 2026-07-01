@@ -47,6 +47,11 @@ function getValorExibicao(item: Pick<Agendamento, "valor" | "valorRecebido" | "t
   return totalMoveis > 0 ? totalMoveis / 2 : valorBase;
 }
 
+function getStatusExibicao(item: AgendamentoComRetorno): Agendamento["status"] {
+  if (item.status !== "retorno") return item.status;
+  return item.isRetorno ? "retorno" : "concluido";
+}
+
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -168,7 +173,17 @@ export default function HomeScreen() {
           const bgColor = item.isRetorno ? colors.warning + "18" : colors.primary + "18";
           const textColor = item.isRetorno ? colors.warning : colors.primary;
           return (
-            <Card onPress={() => router.push(`/agendamento/${item.id}` as any)}>
+            <Card
+              onPress={() =>
+                router.push({
+                  pathname: "/agendamento/[id]",
+                  params: {
+                    id: item.id,
+                    etapa: item.isRetorno ? "retorno" : "agendamento",
+                  },
+                } as any)
+              }
+            >
               <View style={styles.cardRow}>
                 <View style={[styles.timeBox, { backgroundColor: bgColor }]}>
                   <Text style={[styles.timeText, { color: textColor }]}>{hora}</Text>
@@ -202,7 +217,7 @@ export default function HomeScreen() {
                         <MaterialIcons name="location-on" size={20} color={colors.primary} />
                       </TouchableOpacity>
                     )}
-                    <StatusBadge status={item.status} />
+                    <StatusBadge status={getStatusExibicao(item)} />
                   </View>
                 </View>
               </View>

@@ -4,8 +4,8 @@ type Status = "pendente" | "confirmado" | "concluido" | "cancelado" | "aprovado"
 
 const STATUS_CONFIG: Record<Status, { label: string; bg: string; text: string }> = {
   pendente: { label: "Pendente", bg: "#FEF3C7", text: "#92400E" },
-  confirmado: { label: "Confirmado", bg: "#DCFCE7", text: "#166534" },
-  concluido: { label: "Concluído", bg: "#DBEAFE", text: "#1E40AF" },
+  confirmado: { label: "Confirmado", bg: "#DBEAFE", text: "#1E40AF" },
+  concluido: { label: "Concluído", bg: "#DCFCE7", text: "#166534" },
   cancelado: { label: "Cancelado", bg: "#FEE2E2", text: "#991B1B" },
   aprovado: { label: "Aprovado", bg: "#DCFCE7", text: "#166534" },
   recusado: { label: "Recusado", bg: "#FEE2E2", text: "#991B1B" },

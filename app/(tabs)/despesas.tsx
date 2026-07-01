@@ -85,25 +85,27 @@ export default function DespesasTabScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <Card>
-            <View style={styles.rowBetween}>
-              <Text style={[styles.nome, { color: colors.foreground }]} numberOfLines={1}>{item.fornecedorNome}</Text>
-              <View style={[styles.badge, { backgroundColor: item.tipoPessoa === "PF" ? colors.warning + "25" : colors.success + "25" }]}> 
-                <Text style={{ color: item.tipoPessoa === "PF" ? colors.warning : colors.success, fontWeight: "700" }}>{item.tipoPessoa}</Text>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => router.push(`/despesas/${item.id}` as any)}>
+            <Card>
+              <View style={styles.rowBetween}>
+                <Text style={[styles.nome, { color: colors.foreground }]} numberOfLines={1}>{item.fornecedorNome}</Text>
+                <View style={[styles.badge, { backgroundColor: item.tipoPessoa === "PF" ? colors.warning + "25" : colors.success + "25" }]}> 
+                  <Text style={{ color: item.tipoPessoa === "PF" ? colors.warning : colors.success, fontWeight: "700" }}>{item.tipoPessoa}</Text>
+                </View>
               </View>
-            </View>
-            <Text style={[styles.sub, { color: colors.muted }]} numberOfLines={1}>
-              {item.dataEmissao ?? item.createdAt.slice(0, 10)} {item.fornecedorCnpj ? `· CNPJ ${item.fornecedorCnpj}` : ""}
-            </Text>
-            <View style={styles.rowBetween}>
-              <Text style={[styles.valor, { color: colors.primary }]}>{formatMoney(item.valorTotal)}</Text>
-              {item.conferidoIR ? (
-                <Text style={[styles.sub, { color: colors.success }]}>Conferido IR</Text>
-              ) : (
-                <Text style={[styles.sub, { color: colors.muted }]}>Pendente IR</Text>
-              )}
-            </View>
-          </Card>
+              <Text style={[styles.sub, { color: colors.muted }]} numberOfLines={1}>
+                {item.dataEmissao ?? item.createdAt.slice(0, 10)} {item.fornecedorCnpj ? `· CNPJ ${item.fornecedorCnpj}` : ""}
+              </Text>
+              <View style={styles.rowBetween}>
+                <Text style={[styles.valor, { color: colors.primary }]}>{formatMoney(item.valorTotal)}</Text>
+                {item.conferidoIR ? (
+                  <Text style={[styles.sub, { color: colors.success }]}>Conferido IR</Text>
+                ) : (
+                  <Text style={[styles.sub, { color: colors.muted }]}>Pendente IR</Text>
+                )}
+              </View>
+            </Card>
+          </TouchableOpacity>
         )}
       />
     </ScreenContainer>

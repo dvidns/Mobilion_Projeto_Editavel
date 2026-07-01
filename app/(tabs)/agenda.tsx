@@ -52,6 +52,11 @@ function getValorExibicao(item: Agendamento & { isRetorno?: boolean }) {
   return valorBase;
 }
 
+function getStatusExibicao(item: Agendamento & { isRetorno?: boolean }): Agendamento["status"] {
+  if (item.status !== "retorno") return item.status;
+  return item.isRetorno ? "retorno" : "concluido";
+}
+
 export default function AgendaScreen() {
   const colors = useColors();
   const router = useRouter();
@@ -254,7 +259,18 @@ export default function AgendaScreen() {
               const bgColor = item.isRetorno ? colors.warning + "18" : colors.primary + "18";
               const textColor = item.isRetorno ? colors.warning : colors.primary;
               return (
-                <Card key={`${item.id}-${item.isRetorno ? 'retorno' : 'agendamento'}`} onPress={() => router.push(`/agendamento/${item.id}` as any)}>
+                <Card
+                  key={`${item.id}-${item.isRetorno ? 'retorno' : 'agendamento'}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/agendamento/[id]",
+                      params: {
+                        id: item.id,
+                        etapa: item.isRetorno ? "retorno" : "agendamento",
+                      },
+                    } as any)
+                  }
+                >
                   <View style={styles.itemRow}>
                     <View style={[styles.timeBox, { backgroundColor: bgColor }]}>
                       <Text style={[styles.timeText, { color: textColor }]}>{hora}</Text>
@@ -290,7 +306,7 @@ export default function AgendaScreen() {
                       <Text style={[styles.itemValue, { color: colors.success }]}>
                         {formatMoney(getValorExibicao(item))}
                       </Text>
-                      <StatusBadge status={item.status} />
+                      <StatusBadge status={getStatusExibicao(item)} />
                     </View>
                   </View>
                 </Card>

@@ -2,21 +2,22 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useColors } from "@/hooks/use-colors";
+import { startOAuthLogin, type OAuthProviderHint } from "@/constants/oauth";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function LoginScreen() {
   const colors = useColors();
+  const { user, loading: authLoading, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async () => {
+  const handleLogin = async (provider?: OAuthProviderHint) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      console.log("[Login] Starting OAuth login...");
-      // OAuth login handled by backend
-      setError("OAuth login not yet implemented");
-      return;
+      console.log("[Login] Starting OAuth login...", provider ?? "default");
+      await startOAuthLogin(provider);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Login failed";
       console.error("[Login] Error:", errorMsg);
@@ -78,26 +79,70 @@ export default function LoginScreen() {
             </View>
           )}
 
-          {/* Login Button */}
-          <Pressable
-            onPress={handleLogin}
-            disabled={isLoading}
-            style={({ pressed }) => [
-              {
-                backgroundColor: colors.primary,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-            className="rounded-lg p-4 items-center justify-center"
-          >
-            {isLoading ? (
-              <ActivityIndicator color={colors.background} />
-            ) : (
-              <Text className="text-base font-semibold text-background">
-                Fazer Login para Sincronizar
-              </Text>
-            )}
-          </Pressable>
+          {authLoading ? (
+            <View className="rounded-lg p-4 items-center justify-center">
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : user ? (
+            <View className="gap-3">
+              <View className="rounded-lg p-4 border border-border bg-surface">
+                <Text className="text-sm text-muted">Conectado como</Text>
+                <Text className="text-base font-semibold text-foreground">
+                  {user.name || user.email || user.openId}
+                </Text>
+              </View>
+              <Pressable
+                onPress={logout}
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: colors.error,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+                className="rounded-lg p-4 items-center justify-center"
+              >
+                <Text className="text-base font-semibold text-background">Sair</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View className="gap-3">
+              <Pressable
+                onPress={() => handleLogin("google")}
+                disabled={isLoading}
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+                className="rounded-lg p-4 items-center justify-center"
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text className="text-base font-semibold text-background">
+                    Continuar com Google
+                  </Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => handleLogin("facebook")}
+                disabled={isLoading}
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: "#1877F2",
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+                className="rounded-lg p-4 items-center justify-center"
+              >
+                <Text className="text-base font-semibold text-background">
+                  Continuar com Facebook
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
           {/* Info */}
           <Text className="text-xs text-muted text-center">

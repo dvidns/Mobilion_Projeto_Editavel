@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerDespesasHttpRoutes } from "../despesas/http-routes";
+import { registerSubscriptionHttpRoutes } from "../subscription/http-routes";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -40,7 +41,7 @@ async function startServer() {
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header(
       "Access-Control-Allow-Headers",
-      "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Open-Id, X-Device-Id",
     );
     res.header("Access-Control-Allow-Credentials", "true");
 
@@ -62,6 +63,7 @@ async function startServer() {
   });
 
   app.use("/api/despesas", registerDespesasHttpRoutes());
+  app.use("/api/subscription", registerSubscriptionHttpRoutes());
 
   app.use(
     "/api/trpc",
