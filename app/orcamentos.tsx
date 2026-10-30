@@ -1,0 +1,815 @@
+import { useCallback, useMemo, useState } from "react";
+import {
+  View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Modal,
+  ScrollView, TextInput,
+} from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+
+import { ScreenContainer } from "@/components/screen-container";
+import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useColors } from "@/hooks/use-colors";
+import { useWhatsApp } from "@/hooks/use-whatsapp";
+import {
+  getOrcamentos, addOrcamento, updateOrcamento, deleteOrcamento,
+  getClientes, getServicos,
+  type Orcamento, type Cliente, type Servico, type ItemOrcamento,
+} from "@/lib/store";
+
+function formatMoney(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function toNumberSafe(value: unknown, fallback = 0): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  if (typeof value === "string") {
+    const normalized = value.includes(",")
+      ? value.replace(/\./g, "").replace(",", ".")
+      : value;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+export default function OrcamentosScreen() {
+  const colors = useColors();
+  const router = useRouter();
+  const { enviar: enviarWhatsApp } = useWhatsApp();
+  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [servicos, setServicos] = useState<Servico[]>([]);
+  const [clienteSel, setClienteSel] = useState<Cliente | null>(null);
+  const [itens, setItens] = useState<ItemOrcamento[]>([]);
+  const [obs, setObs] = useState("");
+  const [modalCliente, setModalCliente] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Service autocomplete state
+  const [buscaServico, setBuscaServico] = useState("");
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+  const [servicoSelecionado, setServicoSelecionado] = useState<Servico | null>(null);
+  const [valorItem, setValorItem] = useState("");
+  const [quantidadeItem, setQuantidadeItem] = useState("1");
+  const [servicoCustomizado, setServicoCustomizado] = useState("");
+  const [modalServicoCustom, setModalServicoCustom] = useState(false);
+
+  const load = useCallback(async () => {
+    const [ors, cls, svs] = await Promise.all([getOrcamentos(), getClientes(), getServicos()]);
+    setOrcamentos(ors.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)));
+    setClientes(cls);
+    setServicos(svs);
+  }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  function resetServiceForm() {
+    setServicoSelecionado(null);
+    setBuscaServico("");
+    setValorItem("");
+    setQuantidadeItem("1");
+    setMostrarSugestoes(false);
+  }
+
+  function openNew() {
+    setClienteSel(null);
+    setItens([]);
+    setObs("");
+    resetServiceForm();
+    setShowModal(true);
+  }
+
+  const sugestoesServico = useMemo(() => {
+    if (!buscaServico.trim()) return servicos.slice(0, 8);
+    const q = buscaServico.toLowerCase();
+    return servicos.filter((s) => s.nome.toLowerCase().includes(q)).slice(0, 8);
+  }, [buscaServico, servicos]);
+
+  function handleAddItem() {
+    if (!servicoSelecionado) { Alert.alert("Atenção", "Selecione um serviço/móvel."); return; }
+    if (!valorItem) { Alert.alert("Atenção", "Informe o valor."); return; }
+    const qty = Math.max(1, parseInt(quantidadeItem, 10) || 1);
+    const val = toNumberSafe(valorItem, 0);
+    const existing = itens.find((i) => i.servicoId === servicoSelecionado.id);
+    if (existing) {
+      setItens(itens.map((i) =>
+        i.servicoId === servicoSelecionado.id ? { ...i, quantidade: i.quantidade + qty } : i
+      ));
+    } else {
+      setItens([...itens, {
+        servicoId: servicoSelecionado.id,
+        servicoNome: servicoSelecionado.nome,
+        quantidade: qty,
+        valor: val,
+      }]);
+    }
+    resetServiceForm();
+  }
+
+  function updateQuantidade(servicoId: string, delta: number) {
+    setItens((prev) =>
+      prev.map((i) =>
+        i.servicoId === servicoId ? { ...i, quantidade: Math.max(1, i.quantidade + delta) } : i
+      )
+    );
+  }
+
+  function removeItem(id: string) {
+    setItens(itens.filter((i) => i.servicoId !== id));
+  }
+
+  const total = itens.reduce((s, i) => {
+    const valor = toNumberSafe(i.valor, 0);
+    const quantidade = Math.max(1, Math.trunc(toNumberSafe(i.quantidade, 1)));
+    return s + valor * quantidade;
+  }, 0);
+
+  async function salvarOrcamento() {
+    if (!clienteSel) { Alert.alert("Atenção", "Selecione um cliente."); return; }
+    if (itens.length === 0) { Alert.alert("Atenção", "Adicione pelo menos um serviço."); return; }
+    setSaving(true);
+    try {
+      await addOrcamento({
+        clienteId: clienteSel.id,
+        clienteNome: clienteSel.nome,
+        clienteTelefone: clienteSel.telefone,
+        itens,
+        total,
+        status: "pendente",
+        observacoes: obs,
+      });
+      setShowModal(false);
+      load();
+    } catch {
+      Alert.alert("Erro", "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function compartilharWhatsApp(o: Orcamento) {
+    const linhas = o.itens.map(
+      (i) => `• ${i.servicoNome} (x${i.quantidade}): ${formatMoney(i.valor * i.quantidade)}`
+    ).join("\n");
+    const msg = `Olá ${o.clienteNome}! Segue o orçamento:\n\n${linhas}\n\n*Total: ${formatMoney(o.total)}*\n\n${o.observacoes ? o.observacoes + "\n\n" : ""}Aguardo sua confirmação! 😊`;
+    enviarWhatsApp(o.clienteTelefone, msg);
+  }
+
+  function changeStatus(o: Orcamento) {
+    Alert.alert("Status do orçamento", undefined, [
+      { text: "Pendente", onPress: () => { updateOrcamento(o.id, { status: "pendente" }); load(); } },
+      { text: "Aprovado", onPress: () => { updateOrcamento(o.id, { status: "aprovado" }); load(); } },
+      { text: "Recusado", onPress: () => { updateOrcamento(o.id, { status: "recusado" }); load(); } },
+      { text: "Cancelar", style: "cancel" },
+    ]);
+  }
+
+  function confirmDelete(id: string) {
+    Alert.alert("Excluir orçamento?", undefined, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Excluir", style: "destructive", onPress: async () => { await deleteOrcamento(id); load(); } },
+    ]);
+  }
+
+  return (
+    <ScreenContainer>
+      <View style={[styles.header, { backgroundColor: colors.primary }]}>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+          <MaterialIcons name="arrow-back" size={26} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Orçamentos</Text>
+        <TouchableOpacity
+          style={[styles.addBtn, { backgroundColor: "#fff" }]}
+          onPress={openNew}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="add" size={24} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={orcamentos}
+        keyExtractor={(i) => i.id}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <MaterialIcons name="description" size={52} color={colors.border} />
+            <Text style={[styles.emptyText, { color: colors.muted }]}>Nenhum orçamento criado</Text>
+            <TouchableOpacity
+              style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
+              onPress={openNew}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyBtnText}>+ Novo orçamento</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Card>
+            <View style={styles.orcRow}>
+              <View style={styles.orcInfo}>
+                <Text style={[styles.orcCliente, { color: colors.foreground }]}>{item.clienteNome}</Text>
+                <Text style={[styles.orcDate, { color: colors.muted }]}>
+                  {new Date(item.criadoEm).toLocaleDateString("pt-BR")} · {item.itens.length} serviço(s)
+                </Text>
+                <StatusBadge status={item.status} />
+              </View>
+              <Text style={[styles.orcTotal, { color: colors.success }]}>{formatMoney(toNumberSafe(item.total, 0))}</Text>
+            </View>
+            <View style={[styles.orcActions, { borderTopColor: colors.border }]}>
+              <TouchableOpacity
+                style={styles.orcAction}
+                onPress={() => compartilharWhatsApp(item)}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="chat" size={18} color="#25D366" />
+                <Text style={[styles.orcActionText, { color: "#25D366" }]}>WhatsApp</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.orcAction}
+                onPress={() => changeStatus(item)}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="edit" size={18} color={colors.primary} />
+                <Text style={[styles.orcActionText, { color: colors.primary }]}>Status</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.orcAction}
+                onPress={() => confirmDelete(item.id)}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="delete-outline" size={18} color={colors.error} />
+                <Text style={[styles.orcActionText, { color: colors.error }]}>Excluir</Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        )}
+      />
+
+      {/* New budget modal */}
+      <Modal visible={showModal} animationType="slide">
+        <ScreenContainer edges={["top", "left", "right", "bottom"]}>
+          <View style={[styles.header, { backgroundColor: colors.primary }]}>
+            <TouchableOpacity onPress={() => setShowModal(false)} activeOpacity={0.7}>
+              <MaterialIcons name="close" size={26} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Novo Orçamento</Text>
+            <View style={{ width: 26 }} />
+          </View>
+
+          <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+            {/* Cliente */}
+            <Text style={[styles.label, { color: colors.muted }]}>Cliente *</Text>
+            <TouchableOpacity
+              style={[styles.picker, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => setModalCliente(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.pickerText, { color: clienteSel ? colors.foreground : colors.muted }]}>
+                {clienteSel ? clienteSel.nome : "Selecionar cliente..."}
+              </Text>
+              <MaterialIcons name="expand-more" size={22} color={colors.muted} />
+            </TouchableOpacity>
+
+            {/* Itens */}
+            <Text style={[styles.label, { color: colors.muted, marginTop: 4 }]}>Móveis / Serviços *</Text>
+
+            {/* Autocomplete de serviço */}
+            <View style={{ position: "relative", zIndex: 10, marginBottom: 0 }}>
+              <View style={[styles.picker, { borderColor: mostrarSugestoes ? colors.primary : colors.border, backgroundColor: colors.surface, marginBottom: 0 }]}>
+                <MaterialIcons name="search" size={18} color={colors.muted} style={{ marginRight: 6 }} />
+                <TextInput
+                  style={[styles.pickerText, { color: colors.foreground, flex: 1, paddingVertical: 0 }]}
+                  value={buscaServico}
+                  onChangeText={(text) => {
+                    setBuscaServico(text);
+                    setMostrarSugestoes(true);
+                    if (!text.trim()) setServicoSelecionado(null);
+                  }}
+                  onFocus={() => setMostrarSugestoes(true)}
+                  placeholder="Digite para buscar móvel/serviço..."
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="done"
+                />
+                {(buscaServico.length > 0 || servicoSelecionado) && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setBuscaServico("");
+                      setServicoSelecionado(null);
+                      setMostrarSugestoes(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons name="close" size={18} color={colors.muted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Dropdown de sugestões */}
+              {mostrarSugestoes && (
+                <View style={[styles.sugestoesBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <TouchableOpacity
+                    style={[styles.sugestaoItem, { borderBottomColor: colors.border, backgroundColor: colors.primary + "10" }]}
+                    onPress={() => {
+                      setMostrarSugestoes(false);
+                      setModalServicoCustom(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialIcons name="add-circle-outline" size={16} color={colors.primary} />
+                    <Text style={[styles.sugestaoNome, { color: colors.primary }]}>+ Novo serviço customizado</Text>
+                  </TouchableOpacity>
+                  {sugestoesServico.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.sugestaoItem, { borderBottomColor: colors.border }]}
+                      onPress={() => {
+                        setServicoSelecionado(item);
+                        setBuscaServico(item.nome);
+                        setValorItem(String(item.valorSugerido));
+                        setMostrarSugestoes(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.sugestaoNome, { color: colors.foreground }]}>{item.nome}</Text>
+                        <Text style={[styles.sugestaoSub, { color: colors.muted }]}>
+                          {item.categoria} · R$ {item.valorMin}–{item.valorMax}
+                        </Text>
+                      </View>
+                      <Text style={[{ color: colors.success, fontWeight: "700", fontSize: 13 }]}>
+                        R$ {item.valorSugerido}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Serviço selecionado + valor + quantidade */}
+            {servicoSelecionado && !mostrarSugestoes && (
+              <View style={{ marginTop: 8, gap: 8 }}>
+                <View style={[styles.servicoSelecionadoCard, { backgroundColor: colors.primary + "10", borderColor: colors.primary + "40" }]}>
+                  <MaterialIcons name="check-circle" size={16} color={colors.primary} />
+                  <Text style={[{ flex: 1, color: colors.primary, fontSize: 13, fontWeight: "600" }]}>
+                    {servicoSelecionado.nome}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-end" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, { color: colors.muted, marginBottom: 4 }]}>Valor (R$) *</Text>
+                    <TextInput
+                      value={valorItem}
+                      onChangeText={setValorItem}
+                      placeholder="0,00"
+                      placeholderTextColor={colors.muted}
+                      keyboardType="decimal-pad"
+                      style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+                    />
+                  </View>
+                  <View style={{ width: 80 }}>
+                    <Text style={[styles.label, { color: colors.muted, marginBottom: 4 }]}>Qtd</Text>
+                    <TextInput
+                      value={quantidadeItem}
+                      onChangeText={(t) => setQuantidadeItem(t.replace(/\D/g, ""))}
+                      keyboardType="number-pad"
+                      placeholder="1"
+                      placeholderTextColor={colors.muted}
+                      style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.addMovelBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleAddItem}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="playlist-add" size={20} color="#fff" />
+                    <Text style={styles.addMovelBtnText}>Adicionar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Lista de itens */}
+            {itens.length === 0 ? (
+              <Text style={[styles.noItems, { color: colors.muted }]}>Nenhum serviço adicionado.</Text>
+            ) : (
+              itens.map((item) => (
+                <View key={item.servicoId} style={[styles.itemRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+                  <View style={styles.itemInfo}>
+                    <Text style={[styles.itemName, { color: colors.foreground }]}>{item.servicoNome}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+                      <TouchableOpacity onPress={() => updateQuantidade(item.servicoId, -1)} activeOpacity={0.7}>
+                        <MaterialIcons name="remove-circle-outline" size={18} color={colors.primary} />
+                      </TouchableOpacity>
+                      <Text style={[styles.itemVal, { color: colors.foreground }]}>{item.quantidade}x</Text>
+                      <TouchableOpacity onPress={() => updateQuantidade(item.servicoId, 1)} activeOpacity={0.7}>
+                        <MaterialIcons name="add-circle-outline" size={18} color={colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={[styles.itemVal, { color: colors.success, marginTop: 2 }]}>
+                      {formatMoney(item.valor)} → {formatMoney(item.valor * item.quantidade)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeItem(item.servicoId)} activeOpacity={0.7}>
+                    <MaterialIcons name="close" size={20} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+
+            {itens.length > 0 && (
+              <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
+                <Text style={[styles.totalLabel, { color: colors.foreground }]}>Total</Text>
+                <Text style={[styles.totalValue, { color: colors.success }]}>{formatMoney(total)}</Text>
+              </View>
+            )}
+
+            <Input
+              label="Observações"
+              value={obs}
+              onChangeText={setObs}
+              placeholder="Prazo, condições de pagamento..."
+              multiline
+              numberOfLines={3}
+              style={{ height: 80, textAlignVertical: "top" }}
+            />
+
+            <Button title="Salvar Orçamento" onPress={salvarOrcamento} loading={saving} />
+          </ScrollView>
+        </ScreenContainer>
+      </Modal>
+
+      {/* Modal: Clientes */}
+      <Modal visible={modalCliente} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Selecionar Cliente</Text>
+              <TouchableOpacity onPress={() => setModalCliente(false)}>
+                <MaterialIcons name="close" size={24} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={clientes}
+              keyExtractor={(i) => i.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.mItem, { borderBottomColor: colors.border }]}
+                  onPress={() => { setClienteSel(item); setModalCliente(false); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.mItemText, { color: colors.foreground }]}>{item.nome}</Text>
+                  <Text style={[styles.mItemSub, { color: colors.muted }]}>{item.telefone}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={[styles.mEmpty, { color: colors.muted }]}>
+                  Nenhum cliente. Cadastre na aba Clientes.
+                </Text>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Serviço Customizado */}
+      <Modal visible={modalServicoCustom} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Novo Serviço</Text>
+              <TouchableOpacity onPress={() => setModalServicoCustom(false)}>
+                <MaterialIcons name="close" size={24} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 16, gap: 12 }}>
+              <TextInput
+                placeholder="Nome do móvel/serviço"
+                placeholderTextColor={colors.muted}
+                value={servicoCustomizado}
+                onChangeText={setServicoCustomizado}
+                style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]}
+              />
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.btnFlex, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    if (servicoCustomizado.trim()) {
+                      const novoServico = {
+                        id: "custom-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+                        nome: servicoCustomizado.trim(),
+                        categoria: "Customizado",
+                        valorMin: 0,
+                        valorMax: 0,
+                        valorSugerido: 0,
+                      };
+                      setServicoSelecionado(novoServico);
+                      setBuscaServico(novoServico.nome);
+                      setValorItem("");
+                      setMostrarSugestoes(false);
+                      setServicoCustomizado("");
+                      setModalServicoCustom(false);
+                    } else {
+                      Alert.alert("Atenção", "Digite um nome para o serviço.");
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600" }}>Usar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnFlex, { backgroundColor: colors.border }]}
+                  onPress={() => { setServicoCustomizado(""); setModalServicoCustom(false); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: colors.foreground, fontWeight: "600" }}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </ScreenContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  addBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3,
+  },
+  list: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  empty: {
+    alignItems: "center",
+    paddingTop: 60,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 16,
+  },
+  emptyBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  emptyBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  orcRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 10,
+  },
+  orcInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  orcCliente: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  orcDate: {
+    fontSize: 12,
+  },
+  orcTotal: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  orcActions: {
+    flexDirection: "row",
+    borderTopWidth: 0.5,
+    paddingTop: 10,
+    gap: 0,
+  },
+  orcAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 4,
+  },
+  orcActionText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  form: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 5,
+  },
+  picker: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  pickerText: {
+    fontSize: 15,
+    flex: 1,
+  },
+  itensHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  addItemBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addItemText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  sugestoesBox: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: 10,
+    zIndex: 100,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    maxHeight: 220,
+    overflow: "hidden",
+  },
+  sugestaoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+  },
+  sugestaoNome: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  sugestaoSub: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  servicoSelecionadoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  addMovelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignSelf: "flex-end",
+  },
+  addMovelBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  btnFlex: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  noItems: {
+    fontSize: 13,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+    gap: 10,
+  },
+  itemInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  itemName: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  itemVal: {
+    fontSize: 13,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    paddingTop: 12,
+    marginBottom: 16,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  totalValue: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalBox: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "75%",
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  mItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+  },
+  mItemText: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  mItemSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  mEmpty: {
+    textAlign: "center",
+    padding: 30,
+    fontSize: 14,
+  },
+});
