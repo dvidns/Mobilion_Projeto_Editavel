@@ -16,6 +16,12 @@
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID": "887800821690-tgc1u847efftmub1n6tkoi2dnm1mprk9.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB": "887800821690-fm5vvvid91garhl8ahl2hpceb749rlbj.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ACCOUNT_DEFAULT": "atendimento.mobilio@gmail.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "mobilion-assistente"
       }
     },
     "production": {
