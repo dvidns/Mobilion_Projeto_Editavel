@@ -12,6 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
+import { syncAllAgendamentosToGoogleCalendar, MOBILION_CALENDAR_NAME } from "@/lib/google-calendar-service";
+import { uploadBackupToGoogleDrive } from "@/lib/google-drive-service";
+import { syncLocalDataToFirestore } from "@/lib/firestore-sync-service";
 import {
   getAvaliacaoLink, saveAvaliacaoLink,
   getLembretePersonalizado, saveLembretePersonalizado,
@@ -57,6 +61,77 @@ export default function ConfiguracoesScreen() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [backupModalOpen, setBackupModalOpen] = useState(false);
+
+  const {
+    isAuthenticated: isGoogleAuth,
+    user: googleUser,
+    signIn: signInGoogle,
+    signOut: signOutGoogle,
+  } = useGoogleAuth();
+  const [syncingGoogleCalendar, setSyncingGoogleCalendar] = useState(false);
+  const [uploadingGoogleDrive, setUploadingGoogleDrive] = useState(false);
+  const [syncingFirestore, setSyncingFirestore] = useState(false);
+
+  const sincronizarGoogleCalendar = async () => {
+    if (!isGoogleAuth) {
+      Alert.alert("Google Desconectado", "Conecte sua conta Google antes de sincronizar.");
+      return;
+    }
+    setSyncingGoogleCalendar(true);
+    try {
+      const res = await syncAllAgendamentosToGoogleCalendar();
+      Alert.alert(
+        "Sincronização Concluída",
+        `${res.syncedCount} de ${res.totalAgendamentos} agendamentos sincronizados com sucesso no calendário '${MOBILION_CALENDAR_NAME}'.`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro na sincronização";
+      Alert.alert("Erro", msg);
+    } finally {
+      setSyncingGoogleCalendar(false);
+    }
+  };
+
+  const fazerBackupGoogleDrive = async () => {
+    if (!isGoogleAuth) {
+      Alert.alert("Google Desconectado", "Conecte sua conta Google antes de salvar no Drive.");
+      return;
+    }
+    setUploadingGoogleDrive(true);
+    try {
+      const res = await uploadBackupToGoogleDrive();
+      Alert.alert("Backup no Google Drive", `Backup '${res.fileName}' enviado com sucesso para a pasta 'Mobilion Backup' no seu Drive!`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro no upload";
+      Alert.alert("Erro", msg);
+    } finally {
+      setUploadingGoogleDrive(false);
+    }
+  };
+
+  const sincronizarFirestore = async () => {
+    if (!isGoogleAuth) {
+      Alert.alert("Google Desconectado", "Conecte sua conta Google antes de espelhar dados.");
+      return;
+    }
+    setSyncingFirestore(true);
+    try {
+      const res = await syncLocalDataToFirestore();
+      if (res.success) {
+        Alert.alert(
+          "Cloud Firestore",
+          `Sincronização concluída com sucesso!\n• Clientes: ${res.clientesSynced}\n• Atendimentos: ${res.agendamentosSynced}\n• Orçamentos: ${res.orcamentosSynced}`
+        );
+      } else {
+        Alert.alert("Aviso Firestore", res.error || "Não foi possível concluir a sincronização.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro no Firestore";
+      Alert.alert("Erro", msg);
+    } finally {
+      setSyncingFirestore(false);
+    }
+  };
 
   const verificarAtualizacao = useCallback(async () => {
     setIsCheckingUpdate(true);
@@ -294,6 +369,93 @@ export default function ConfiguracoesScreen() {
         </View>
 
         <Button title="Salvar Tudo" onPress={salvar} loading={saving} />
+
+        {/* Integração Google Oficial (Mobilion Móveis) */}
+        <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.sectionTitle, { color: colors.primary }]}>INTEGRAÇÃO GOOGLE (MOBILION)</Text>
+          <Text style={[styles.sectionDesc, { color: colors.muted }]}>
+            Conecte a conta da Mobilion Móveis (atendimento.mobilio@gmail.com) para sincronizar Google Agenda, Google Contatos e Google Drive.
+          </Text>
+
+          {isGoogleAuth && googleUser ? (
+            <View style={{ gap: 12, marginTop: 4 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 10, backgroundColor: "#E6F4EA", borderRadius: 8 }}>
+                <MaterialIcons name="check-circle" size={24} color="#34A853" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "bold", color: "#137333" }}>Conectado ao Google</Text>
+                  <Text style={{ fontSize: 13, color: "#137333" }}>{googleUser.email}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={signOutGoogle}
+                  style={{ paddingVertical: 4, paddingHorizontal: 8, backgroundColor: "#fff", borderRadius: 6, borderWidth: 1, borderColor: "#34A853" }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: "#137333" }}>Sair</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.updateCheckBtn, { borderColor: "#1A73E8" }]}
+                onPress={sincronizarGoogleCalendar}
+                disabled={syncingGoogleCalendar}
+                activeOpacity={0.75}
+              >
+                {syncingGoogleCalendar ? (
+                  <ActivityIndicator size={18} color="#1A73E8" />
+                ) : (
+                  <MaterialIcons name="calendar-month" size={18} color="#1A73E8" />
+                )}
+                <Text style={[styles.updateCheckText, { color: "#1A73E8" }]}>
+                  {syncingGoogleCalendar ? "Sincronizando..." : "Sincronizar Google Agenda ('Mobilion — Atendimentos')"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.updateCheckBtn, { borderColor: "#FBBC04" }]}
+                onPress={fazerBackupGoogleDrive}
+                disabled={uploadingGoogleDrive}
+                activeOpacity={0.75}
+              >
+                {uploadingGoogleDrive ? (
+                  <ActivityIndicator size={18} color="#FBBC04" />
+                ) : (
+                  <MaterialIcons name="cloud-upload" size={18} color="#EA8600" />
+                )}
+                <Text style={[styles.updateCheckText, { color: "#EA8600" }]}>
+                  {uploadingGoogleDrive ? "Enviando ao Drive..." : "Salvar Backup no Google Drive"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.updateCheckBtn, { borderColor: "#FF6D00" }]}
+                onPress={sincronizarFirestore}
+                disabled={syncingFirestore}
+                activeOpacity={0.75}
+              >
+                {syncingFirestore ? (
+                  <ActivityIndicator size={18} color="#FF6D00" />
+                ) : (
+                  <MaterialIcons name="sync" size={18} color="#FF6D00" />
+                )}
+                <Text style={[styles.updateCheckText, { color: "#FF6D00" }]}>
+                  {syncingFirestore ? "Espelhando..." : "Sincronizar Nuvem (Cloud Firestore)"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ marginTop: 8 }}>
+              <TouchableOpacity
+                style={[styles.updateCheckBtn, { borderColor: colors.primary, backgroundColor: colors.primary + "10" }]}
+                onPress={signInGoogle}
+                activeOpacity={0.75}
+              >
+                <MaterialIcons name="login" size={18} color={colors.primary} />
+                <Text style={[styles.updateCheckText, { color: colors.primary, fontWeight: "bold" }]}>
+                  Conectar Conta Google
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>CONTA</Text>

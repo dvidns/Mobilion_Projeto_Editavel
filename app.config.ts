@@ -39,12 +39,12 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
-    permissions: ["POST_NOTIFICATIONS", "READ_CONTACTS"],
+    permissions: ["POST_NOTIFICATIONS", "READ_CONTACTS", "INTERNET"],
     intentFilters: [
       {
         action: "VIEW",
         autoVerify: true,
-        data: [{ scheme: env.scheme, host: "*" }],
+        data: [{ scheme: env.scheme, host: "*" }, { scheme: "mobilion", host: "*" }],
         category: ["BROWSABLE", "DEFAULT"],
       },
     ],

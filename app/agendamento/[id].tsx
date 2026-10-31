@@ -21,6 +21,10 @@ import {
   type Agendamento, type StatusAgendamento, type ItemEstoque,
 } from "@/lib/store";
 import { generateOrcamentoPDF, sharePDF } from "@/lib/pdf-service";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
+import { syncAgendamentoToGoogleCalendar, MOBILION_CALENDAR_NAME } from "@/lib/google-calendar-service";
+import { createGoogleMeetMeeting } from "@/lib/google-meet-service";
+import { openMaps } from "@/lib/maps-service";
 
 function formatMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -48,6 +52,9 @@ export default function AgendamentoDetalheScreen() {
   const [editData, setEditData] = useState<Partial<Agendamento>>({});
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const { enviar: enviarWhatsApp, loading: whatsappLoading } = useWhatsApp();
+  const { isAuthenticated: isGoogleAuth } = useGoogleAuth();
+  const [syncingGoogleCal, setSyncingGoogleCal] = useState(false);
+  const [creatingMeet, setCreatingMeet] = useState(false);
 
   // Modal para valor recebido (Android não suporta Alert.prompt)
   const [modalConcluidoVisible, setModalConcluidoVisible] = useState(false);
@@ -457,6 +464,76 @@ export default function AgendamentoDetalheScreen() {
       { text: "IMG", onPress: () => gerarOrcamento("img") },
       { text: "Cancelar", style: "cancel" },
     ]);
+  }
+
+  async function sincronizarGoogleAgendaIndividual() {
+    if (!item) return;
+    if (!isGoogleAuth) {
+      Alert.alert(
+        "Google Desconectado",
+        "Conecte a conta da Mobilion para sincronizar com o Google Agenda.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Conectar", onPress: () => router.push("/login" as any) },
+        ]
+      );
+      return;
+    }
+
+    setSyncingGoogleCal(true);
+    try {
+      const res = await syncAgendamentoToGoogleCalendar(item);
+      if (res.success) {
+        Alert.alert(
+          "Google Agenda",
+          `Agendamento sincronizado no calendário '${MOBILION_CALENDAR_NAME}'.${item.temRetorno ? "\nInclui evento vinculado para o Retorno." : ""}`
+        );
+      } else {
+        Alert.alert("Erro", "Não foi possível sincronizar.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      Alert.alert("Erro", msg);
+    } finally {
+      setSyncingGoogleCal(false);
+    }
+  }
+
+  async function gerarGoogleMeet() {
+    if (!item) return;
+    if (!isGoogleAuth) {
+      Alert.alert("Conta Google", "Conecte sua conta Google para criar uma reunião no Google Meet.");
+      return;
+    }
+
+    setCreatingMeet(true);
+    try {
+      const [year, month, day] = item.data.split("-").map(Number);
+      const [hours, minutes] = (item.hora || "09:00").split(":").map(Number);
+      const start = new Date(year, month - 1, day, hours, minutes);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+      const res = await createGoogleMeetMeeting({
+        title: `${item.tipoServico} - ${item.clienteNome}`,
+        startDateIso: start.toISOString(),
+        endDateIso: end.toISOString(),
+        description: `Alinhamento com cliente ${item.clienteNome} (${item.clienteTelefone})`,
+      });
+
+      Alert.alert(
+        "Google Meet Criado",
+        `Link da reunião:\n${res.meetUrl}`,
+        [
+          { text: "Abrir Reunião", onPress: () => Linking.openURL(res.meetUrl) },
+          { text: "OK", style: "cancel" },
+        ]
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar Meet";
+      Alert.alert("Erro", msg);
+    } finally {
+      setCreatingMeet(false);
+    }
   }
 
   if (isEditing) {
@@ -1007,14 +1084,11 @@ export default function AgendamentoDetalheScreen() {
         {/* Endereço standalone */}
         {item.endereco && (
           <TouchableOpacity
-            onPress={() => {
-              const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(item.endereco || "")}`;
-              Linking.openURL(mapsUrl).catch(() => Linking.openURL("https://www.google.com/maps"));
-            }}
+            onPress={() => openMaps(item.endereco!)}
             activeOpacity={0.7}
             style={styles.enderecoRow}
           >
-            <MaterialIcons name="location-on" size={18} color="#E53935" />
+            <MaterialIcons name="navigation" size={18} color="#1A73E8" />
             <Text style={styles.enderecoText}>{item.endereco}</Text>
           </TouchableOpacity>
         )}
@@ -1051,12 +1125,12 @@ export default function AgendamentoDetalheScreen() {
             </View>
             {item.enderecoRetorno && (
               <TouchableOpacity
-                onPress={() => Linking.openURL(`https://www.google.com/maps/search/${encodeURIComponent(item.enderecoRetorno || "")}`)}
+                onPress={() => openMaps(item.enderecoRetorno!)}
                 activeOpacity={0.7}
                 style={styles.enderecoRow}
               >
-                <MaterialIcons name="location-on" size={18} color="#E53935" />
-                <Text style={styles.enderecoText}>{item.enderecoRetorno}</Text>
+                <MaterialIcons name="navigation" size={18} color="#1A73E8" />
+                <Text style={styles.enderecoText}>{item.enderecoRetorno} (Retorno)</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1090,7 +1164,7 @@ export default function AgendamentoDetalheScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.miniActionRow}>
+          <View style={[styles.miniActionRow, { flexWrap: "wrap", gap: 6 }]}>
             <TouchableOpacity
               style={[styles.miniActionBtn, { backgroundColor: colors.primary + "15" }]}
               onPress={abrirAcoesOrcamento}
@@ -1099,7 +1173,31 @@ export default function AgendamentoDetalheScreen() {
             >
               <MaterialIcons name="description" size={16} color={colors.primary} />
               <Text style={[styles.miniActionText, { color: colors.primary }]}>
-                {generatingPDF ? "Gerando..." : "Orçamento PDF/IMG"}
+                {generatingPDF ? "Gerando..." : "Orçamento"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.miniActionBtn, { backgroundColor: "#1A73E815" }]}
+              onPress={sincronizarGoogleAgendaIndividual}
+              activeOpacity={0.8}
+              disabled={syncingGoogleCal}
+            >
+              <MaterialIcons name="calendar-month" size={16} color="#1A73E8" />
+              <Text style={[styles.miniActionText, { color: "#1A73E8" }]}>
+                {syncingGoogleCal ? "..." : "Google Agenda"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.miniActionBtn, { backgroundColor: "#34A85315" }]}
+              onPress={gerarGoogleMeet}
+              activeOpacity={0.8}
+              disabled={creatingMeet}
+            >
+              <MaterialIcons name="video-call" size={16} color="#34A853" />
+              <Text style={[styles.miniActionText, { color: "#34A853" }]}>
+                {creatingMeet ? "..." : "Google Meet"}
               </Text>
             </TouchableOpacity>
           </View>

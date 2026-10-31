@@ -1,152 +1,175 @@
 import { ScreenContainer } from "@/components/screen-container";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View, Image } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useColors } from "@/hooks/use-colors";
-import { startOAuthLogin, type OAuthProviderHint } from "@/constants/oauth";
-import { useAuth } from "@/hooks/use-auth";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
 
 export default function LoginScreen() {
   const colors = useColors();
-  const { user, loading: authLoading, logout } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    isAuthenticated: isGoogleAuth,
+    user: googleUser,
+    loading: googleLoading,
+    signIn: signInGoogle,
+    signOut: signOutGoogle,
+    error: googleError,
+  } = useGoogleAuth();
 
-  const handleLogin = async (provider?: OAuthProviderHint) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
-      setError(null);
-
-      console.log("[Login] Starting OAuth login...", provider ?? "default");
-      await startOAuthLogin(provider);
+      setErrorMessage(null);
+      const success = await signInGoogle();
+      if (!success && googleError) {
+        setErrorMessage(googleError);
+      }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Login failed";
-      console.error("[Login] Error:", errorMsg);
-      setError(errorMsg);
+      const msg = err instanceof Error ? err.message : "Falha ao conectar com o Google";
+      setErrorMessage(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const activeError = errorMessage || googleError;
+
   return (
     <ScreenContainer className="p-6">
       <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 justify-center gap-8">
+        <View className="flex-1 justify-center gap-8 py-6">
           {/* Header */}
-          <View className="items-center gap-4">
-            <Text className="text-4xl font-bold text-foreground">MontaFácil</Text>
-            <Text className="text-base text-muted text-center">
-              Sincronize sua agenda e faça backup dos seus dados
+          <View className="items-center gap-2">
+            <Text className="text-4xl font-bold text-foreground">Mobilion</Text>
+            <Text className="text-base font-medium text-primary">Assistente do Montador</Text>
+            <Text className="text-sm text-muted text-center max-w-xs mt-1">
+              Conecte sua conta Google corporativa para sincronizar Agenda, Contatos e Backups.
             </Text>
           </View>
 
-          {/* Features */}
-          <View className="gap-4">
-            <View className="flex-row gap-3 items-start">
-              <Text className="text-2xl">📅</Text>
+          {/* Features integradas com Google */}
+          <View className="gap-4 bg-surface p-4 rounded-xl border border-border">
+            <View className="flex-row gap-3 items-center">
+              <View className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center">
+                <MaterialIcons name="event" size={22} color={colors.primary} />
+              </View>
               <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">Sincronize Agenda</Text>
-                <Text className="text-sm text-muted">
-                  Mantenha seus agendamentos sincronizados entre dispositivos
+                <Text className="text-base font-semibold text-foreground">Google Agenda</Text>
+                <Text className="text-xs text-muted">
+                  Calendário "Mobilion — Atendimentos" com montagem e retorno
                 </Text>
               </View>
             </View>
 
-            <View className="flex-row gap-3 items-start">
-              <Text className="text-2xl">💾</Text>
+            <View className="flex-row gap-3 items-center">
+              <View className="w-10 h-10 rounded-full bg-success/10 items-center justify-center">
+                <MaterialIcons name="contacts" size={22} color="#34A853" />
+              </View>
               <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">Backup Automático</Text>
-                <Text className="text-sm text-muted">
-                  Seus dados estão sempre protegidos na nuvem
+                <Text className="text-base font-semibold text-foreground">Google Contatos</Text>
+                <Text className="text-xs text-muted">
+                  Importação direta de clientes sem duplicidades
                 </Text>
               </View>
             </View>
 
-            <View className="flex-row gap-3 items-start">
-              <Text className="text-2xl">🔒</Text>
+            <View className="flex-row gap-3 items-center">
+              <View className="w-10 h-10 rounded-full bg-accent/10 items-center justify-center">
+                <MaterialIcons name="cloud-upload" size={22} color="#FBBC04" />
+              </View>
               <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">Seguro</Text>
-                <Text className="text-sm text-muted">
-                  Acesso seguro com autenticação
+                <Text className="text-base font-semibold text-foreground">Google Drive</Text>
+                <Text className="text-xs text-muted">
+                  Armazenamento seguro de backups JSON e PDFs de ordens
                 </Text>
               </View>
             </View>
           </View>
 
-          {/* Error Message */}
-          {error && (
-            <View className="bg-error/10 border border-error rounded-lg p-4">
-              <Text className="text-error text-sm">{error}</Text>
+          {/* Erro */}
+          {activeError && (
+            <View className="bg-error/10 border border-error rounded-lg p-3">
+              <Text className="text-error text-xs">{activeError}</Text>
             </View>
           )}
 
-          {authLoading ? (
+          {/* Card de Sessão ou Ação */}
+          {googleLoading ? (
             <View className="rounded-lg p-4 items-center justify-center">
               <ActivityIndicator color={colors.primary} />
             </View>
-          ) : user ? (
-            <View className="gap-3">
-              <View className="rounded-lg p-4 border border-border bg-surface">
-                <Text className="text-sm text-muted">Conectado como</Text>
-                <Text className="text-base font-semibold text-foreground">
-                  {user.name || user.email || user.openId}
-                </Text>
+          ) : isGoogleAuth && googleUser ? (
+            <View className="gap-4">
+              <View className="rounded-xl p-4 border border-border bg-surface flex-row items-center gap-3">
+                {googleUser.picture ? (
+                  <Image
+                    source={{ uri: googleUser.picture }}
+                    className="w-12 h-12 rounded-full"
+                  />
+                ) : (
+                  <View className="w-12 h-12 rounded-full bg-primary/20 items-center justify-center">
+                    <Text className="text-lg font-bold text-primary">
+                      {googleUser.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View className="flex-1">
+                  <Text className="text-xs text-success font-semibold">Conta Google Conectada</Text>
+                  <Text className="text-base font-bold text-foreground" numberOfLines={1}>
+                    {googleUser.name}
+                  </Text>
+                  <Text className="text-xs text-muted" numberOfLines={1}>
+                    {googleUser.email}
+                  </Text>
+                </View>
               </View>
+
               <Pressable
-                onPress={logout}
+                onPress={signOutGoogle}
                 style={({ pressed }) => [
                   {
                     backgroundColor: colors.error,
                     opacity: pressed ? 0.8 : 1,
                   },
                 ]}
-                className="rounded-lg p-4 items-center justify-center"
+                className="rounded-lg p-3.5 items-center justify-center"
               >
-                <Text className="text-base font-semibold text-background">Sair</Text>
+                <Text className="text-sm font-semibold text-background">Desconectar do Google</Text>
               </Pressable>
             </View>
           ) : (
             <View className="gap-3">
               <Pressable
-                onPress={() => handleLogin("google")}
+                onPress={handleGoogleLogin}
                 disabled={isLoading}
                 style={({ pressed }) => [
                   {
                     backgroundColor: colors.primary,
-                    opacity: pressed ? 0.8 : 1,
+                    opacity: pressed ? 0.85 : 1,
                   },
                 ]}
-                className="rounded-lg p-4 items-center justify-center"
+                className="rounded-xl p-4 flex-row items-center justify-center gap-3 shadow-sm"
               >
                 {isLoading ? (
-                  <ActivityIndicator color={colors.background} />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text className="text-base font-semibold text-background">
-                    Continuar com Google
-                  </Text>
+                  <>
+                    <MaterialIcons name="login" size={22} color="#FFFFFF" />
+                    <Text className="text-base font-semibold text-white">
+                      Conectar com Conta Google
+                    </Text>
+                  </>
                 )}
-              </Pressable>
-
-              <Pressable
-                onPress={() => handleLogin("facebook")}
-                disabled={isLoading}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: "#1877F2",
-                    opacity: pressed ? 0.8 : 1,
-                  },
-                ]}
-                className="rounded-lg p-4 items-center justify-center"
-              >
-                <Text className="text-base font-semibold text-background">
-                  Continuar com Facebook
-                </Text>
               </Pressable>
             </View>
           )}
 
-          {/* Info */}
-          <Text className="text-xs text-muted text-center">
-            Você pode usar o app sem fazer login, mas a sincronização e backup automático requerem autenticação.
+          {/* Rodapé informativo */}
+          <Text className="text-xs text-muted text-center px-4">
+            A conta recomendada para este app é <Text className="font-semibold text-foreground">atendimento.mobilio@gmail.com</Text>. O app continuará funcionando normalmente em modo offline mesmo se não estiver conectado.
           </Text>
         </View>
       </ScrollView>

@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { gerarRelatorioExcel, gerarRelatorioPDF, gerarRelatorioCSV, gerarRelatorioAgendamentosPDF } from '../lib/report-service';
-import { getAgendamentos, type Agendamento } from '../lib/store';
+
+vi.mock("expo-modules-core", () => ({
+  EventEmitter: class {
+    addListener() { return { remove: vi.fn() }; }
+    removeAllListeners() {}
+    emit() {}
+  },
+  NativeModulesProxy: {},
+  Platform: { OS: "android" },
+  requireNativeModule: vi.fn(() => ({})),
+  requireOptionalNativeModule: vi.fn(() => null),
+}));
+
+vi.mock("expo-print", () => ({
+  printToFileAsync: vi.fn(async () => ({ uri: "mock-pdf-uri" })),
+}));
 
 const xlsxMocks = vi.hoisted(() => ({
   mockJsonToSheet: vi.fn(),
@@ -30,6 +44,10 @@ vi.mock('xlsx', () => ({
 }));
 
 vi.mock('../lib/store');
+
+import type { Agendamento } from '../lib/store';
+import { gerarRelatorioExcel, gerarRelatorioPDF, gerarRelatorioCSV, gerarRelatorioAgendamentosPDF } from '../lib/report-service';
+import { getAgendamentos } from '../lib/store';
 
 const mockGetAgendamentos = vi.mocked(getAgendamentos);
 

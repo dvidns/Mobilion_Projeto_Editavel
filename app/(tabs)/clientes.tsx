@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert, Platform,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert, Platform, Modal, ActivityIndicator,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
@@ -10,6 +10,13 @@ import { ScreenContainer } from "@/components/screen-container";
 import { Card } from "@/components/ui/card";
 import { useColors } from "@/hooks/use-colors";
 import { getClientes, addCliente, deleteCliente, type Cliente } from "@/lib/store";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
+import {
+  getGoogleContactsPreview,
+  importGoogleContactsBatch,
+  importSingleGoogleContact,
+  type GoogleContactPreviewItem,
+} from "@/lib/google-contacts-service";
 
 export default function ClientesScreen() {
   const colors = useColors();
@@ -17,6 +24,13 @@ export default function ClientesScreen() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busca, setBusca] = useState("");
   const [importando, setImportando] = useState(false);
+
+  const { isAuthenticated: isGoogleAuth } = useGoogleAuth();
+  const [modalGoogle, setModalGoogle] = useState(false);
+  const [carregandoGoogle, setCarregandoGoogle] = useState(false);
+  const [googleContatos, setGoogleContatos] = useState<GoogleContactPreviewItem[]>([]);
+  const [buscaGoogle, setBuscaGoogle] = useState("");
+  const [importandoGoogle, setImportandoGoogle] = useState(false);
 
   const load = useCallback(async () => {
     const all = await getClientes();
@@ -30,6 +44,112 @@ export default function ClientesScreen() {
       c.nome.toLowerCase().includes(busca.toLowerCase()) ||
       c.telefone.includes(busca)
   );
+
+  async function abrirMenuImportacao() {
+    Alert.alert(
+      "Importar Contatos",
+      "Escolha a origem dos contatos para cadastrar clientes:",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Google Contatos (Nuvem)",
+          onPress: abrirGoogleContatos,
+        },
+        {
+          text: "Agenda do Celular (Local)",
+          onPress: importarContatos,
+        },
+      ]
+    );
+  }
+
+  async function abrirGoogleContatos() {
+    if (!isGoogleAuth) {
+      Alert.alert(
+        "Conta Google Necessária",
+        "Conecte a conta da Mobilion (atendimento.mobilio@gmail.com) para buscar contatos do Google.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Conectar Google", onPress: () => router.push("/login" as any) },
+        ]
+      );
+      return;
+    }
+
+    setModalGoogle(true);
+    setCarregandoGoogle(true);
+    try {
+      const contatos = await getGoogleContactsPreview();
+      setGoogleContatos(contatos);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar contatos do Google";
+      Alert.alert("Erro", msg);
+      setModalGoogle(false);
+    } finally {
+      setCarregandoGoogle(false);
+    }
+  }
+
+  async function buscarGoogle(termo: string) {
+    setBuscaGoogle(termo);
+    if (!termo.trim()) {
+      abrirGoogleContatos();
+      return;
+    }
+    setCarregandoGoogle(true);
+    try {
+      const contatos = await getGoogleContactsPreview(termo);
+      setGoogleContatos(contatos);
+    } catch (err) {
+      console.warn("Erro na busca Google:", err);
+    } finally {
+      setCarregandoGoogle(false);
+    }
+  }
+
+  async function importarContatoIndividual(contato: GoogleContactPreviewItem) {
+    try {
+      const res = await importSingleGoogleContact(contato);
+      await load();
+      if (res.action === "created") {
+        Alert.alert("Importado!", `Cliente ${res.client.nome} cadastrado com sucesso.`);
+      } else {
+        Alert.alert("Atualizado", `Cliente ${res.client.nome} já estava cadastrado. Dados preservados.`);
+      }
+      setGoogleContatos((prev) =>
+        prev.map((c) =>
+          c.resourceName === contato.resourceName ? { ...c, isRegistered: true } : c
+        )
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro na importação";
+      Alert.alert("Erro", msg);
+    }
+  }
+
+  async function importarNovosEmLote() {
+    const novos = googleContatos.filter((c) => !c.isRegistered);
+    if (novos.length === 0) {
+      Alert.alert("Aviso", "Todos os contatos listados já estão cadastrados.");
+      return;
+    }
+
+    setImportandoGoogle(true);
+    try {
+      const res = await importGoogleContactsBatch(novos);
+      await load();
+      Alert.alert(
+        "Importação Concluída",
+        `${res.imported} novos clientes cadastrados a partir do Google Contatos!`
+      );
+      setModalGoogle(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro na importação";
+      Alert.alert("Erro", msg);
+    } finally {
+      setImportandoGoogle(false);
+    }
+  }
 
   async function importarContatos() {
     if (Platform.OS === "web") {
@@ -115,7 +235,7 @@ export default function ClientesScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={[styles.iconBtn, { backgroundColor: "rgba(255,255,255,0.2)" }]}
-            onPress={importarContatos}
+            onPress={abrirMenuImportacao}
             activeOpacity={0.8}
             disabled={importando}
           >
@@ -211,6 +331,122 @@ export default function ClientesScreen() {
           </Card>
         )}
       />
+
+      {/* Modal de Importação Google Contatos */}
+      <Modal
+        visible={modalGoogle}
+        animationType="slide"
+        onRequestClose={() => setModalGoogle(false)}
+      >
+        <ScreenContainer>
+          <View style={[styles.header, { backgroundColor: colors.primary }]}>
+            <TouchableOpacity onPress={() => setModalGoogle(false)} activeOpacity={0.7}>
+              <MaterialIcons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Google Contatos</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <View style={[styles.searchWrap, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+            <MaterialIcons name="search" size={20} color={colors.muted} />
+            <TextInput
+              style={[styles.searchInput, { color: colors.foreground }]}
+              placeholder="Buscar no Google Contatos..."
+              placeholderTextColor={colors.muted}
+              value={buscaGoogle}
+              onChangeText={buscarGoogle}
+              returnKeyType="search"
+            />
+            {buscaGoogle.length > 0 && (
+              <TouchableOpacity onPress={() => buscarGoogle("")} activeOpacity={0.7}>
+                <MaterialIcons name="close" size={18} color={colors.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Barra de Ações em Lote */}
+          <View style={{ paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: colors.surface, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+            <Text style={{ fontSize: 13, color: colors.muted }}>
+              {googleContatos.length} contato(s) encontrado(s)
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, opacity: importandoGoogle ? 0.6 : 1 }}
+              onPress={importarNovosEmLote}
+              disabled={importandoGoogle || googleContatos.every(c => c.isRegistered)}
+              activeOpacity={0.8}
+            >
+              {importandoGoogle ? (
+                <ActivityIndicator size={14} color="#fff" />
+              ) : (
+                <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Importar Novos</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {carregandoGoogle ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 20 }}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={{ marginTop: 12, color: colors.muted, fontSize: 14 }}>Carregando contatos da sua conta Google...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={googleContatos}
+              keyExtractor={(item) => item.resourceName}
+              contentContainerStyle={{ padding: 16, gap: 10 }}
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <MaterialIcons name="contacts" size={48} color={colors.border} />
+                  <Text style={[styles.emptyText, { color: colors.muted }]}>
+                    Nenhum contato com telefone encontrado na conta Google.
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <View
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: 10,
+                    padding: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "bold", color: colors.foreground }}>
+                      {item.name}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.primary, marginTop: 2 }}>
+                      📞 {item.primaryPhone}
+                    </Text>
+                    {item.address ? (
+                      <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }} numberOfLines={1}>
+                        📍 {item.address}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {item.isRegistered ? (
+                    <View style={{ backgroundColor: "#E6F4EA", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
+                      <Text style={{ color: "#137333", fontSize: 11, fontWeight: "bold" }}>Já Cadastrado</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => importarContatoIndividual(item)}
+                      style={{ backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "bold" }}>Importar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            />
+          )}
+        </ScreenContainer>
+      </Modal>
     </ScreenContainer>
   );
 }

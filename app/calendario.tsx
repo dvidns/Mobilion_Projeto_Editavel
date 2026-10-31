@@ -15,17 +15,51 @@ import {
   getDefaultCalendar,
 } from "@/lib/calendar-service";
 import { useAuth } from "@/hooks/use-auth";
+import { useGoogleAuth } from "@/hooks/use-google-auth";
+import { syncAllAgendamentosToGoogleCalendar, MOBILION_CALENDAR_NAME } from "@/lib/google-calendar-service";
 
 export default function CalendarioScreen() {
   const colors = useColors();
   const router = useRouter();
   const { user } = useAuth();
+  const { isAuthenticated: isGoogleAuth, user: googleUser, signIn: signInGoogle } = useGoogleAuth();
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [googleSyncCount, setGoogleSyncCount] = useState<number | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [calendars, setCalendars] = useState<Calendar.Calendar[]>([]);
   const [selectedCalendar, setSelectedCalendar] = useState<Calendar.Calendar | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
+
+  async function handleGoogleCalendarSync() {
+    if (!isGoogleAuth) {
+      Alert.alert(
+        "Conectar Conta Google",
+        "Conecte sua conta da Mobilion (atendimento.mobilio@gmail.com) para sincronizar o Google Agenda.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Conectar", onPress: () => router.push("/login" as any) },
+        ]
+      );
+      return;
+    }
+
+    setSyncingGoogle(true);
+    try {
+      const res = await syncAllAgendamentosToGoogleCalendar();
+      setGoogleSyncCount(res.syncedCount);
+      Alert.alert(
+        "Google Agenda Sincronizada",
+        `${res.syncedCount} de ${res.totalAgendamentos} agendamentos sincronizados no calendário '${MOBILION_CALENDAR_NAME}'.\nInclui montagens e retornos agendados.`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro na sincronização";
+      Alert.alert("Erro", msg);
+    } finally {
+      setSyncingGoogle(false);
+    }
+  }
 
   useEffect(() => {
     initializeCalendar();
@@ -155,7 +189,52 @@ export default function CalendarioScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Status */}
+        {/* Card do Google Agenda Oficial */}
+        <View style={[styles.statusCard, { backgroundColor: colors.surface, borderColor: "#1A73E8", borderWidth: 1.5 }]}>
+          <View style={styles.statusHeader}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#E8F0FE", alignItems: "center", justifyContent: "center" }}>
+              <MaterialIcons name="event" size={26} color="#1A73E8" />
+            </View>
+            <View style={styles.statusInfo}>
+              <Text style={[styles.statusTitle, { color: colors.foreground }]}>
+                Google Agenda
+              </Text>
+              <Text style={{ fontSize: 13, color: isGoogleAuth ? "#137333" : colors.muted, fontWeight: isGoogleAuth ? "600" : "normal" }}>
+                {isGoogleAuth && googleUser ? `Conectado: ${googleUser.email}` : "Conta Google desconectada"}
+              </Text>
+              <Text style={[styles.statusDesc, { color: colors.muted, marginTop: 2 }]}>
+                Calendário dedicado "{MOBILION_CALENDAR_NAME}" na nuvem
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={{
+              backgroundColor: isGoogleAuth ? "#1A73E8" : colors.primary,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              paddingVertical: 12,
+              borderRadius: 8,
+              marginTop: 12,
+            }}
+            onPress={handleGoogleCalendarSync}
+            disabled={syncingGoogle}
+            activeOpacity={0.8}
+          >
+            {syncingGoogle ? (
+              <ActivityIndicator size={18} color="#fff" />
+            ) : (
+              <MaterialIcons name="cloud-sync" size={20} color="#fff" />
+            )}
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>
+              {syncingGoogle ? "Sincronizando com Google..." : isGoogleAuth ? "Sincronizar Google Agenda" : "Conectar Google e Sincronizar"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Status Calendário Local */}
         <View style={[styles.statusCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.statusHeader}>
             <MaterialIcons name="event-available" size={28} color={colors.primary} />
